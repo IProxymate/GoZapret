@@ -97,40 +97,58 @@ func NewApp(assets embed.FS, logger *slog.Logger) *App {
 
 	// Устанавливаем начальные значения из конфигурации
 	cfg := configManager.GetConfig()
-	statusText.Set("Статус: Остановлено")
-	isRunning.Set(false)
+
+	// Проверяем, запущен ли процесс winws.exe в системе
+	processRunning := processManager.IsWinwsProcessRunning()
+	if processRunning {
+		// Если процесс запущен, устанавливаем соответствующий статус
+		lastStrategy := cfg.LastStrategyName
+		if lastStrategy != "" {
+			statusText.Set(fmt.Sprintf("Статус: Запущено (%s)", lastStrategy))
+		} else {
+			statusText.Set("Статус: Запущено")
+		}
+		isRunning.Set(true)
+	} else {
+		// Процесс не запущен
+		statusText.Set("Статус: Остановлено")
+		isRunning.Set(false)
+	}
+
 	autoStart.Set(cfg.AutoStart)
 	gameFilter.Set(cfg.GameFilter)
 	ipsetMode.Set(cfg.IpsetMode)
 	version.Set(cfg.Version)
 
-	// Проверяем и устанавливаем состояние автозапуска при старте приложения
+	// Синхронизируем состояние автозапуска между конфигом и системой
 	isEnabled, err := autostartService.IsAutoStartEnabled()
 	if err != nil {
 		logger.Warn("Ошибка проверки состояния автозапуска", "error", err)
-		// Если не удалось проверить, устанавливаем значение из конфига
+		// Если не удалось проверить, используем значение из конфига
 		isEnabled = cfg.AutoStart
 	}
 
-	// Обновляем биндинг автозапуска в UI, чтобы отразить реальное состояние в системе
-	autoStart.Set(isEnabled)
-
+	// Приоритет отдаем значению из конфига
 	// Если автозапуск включен в конфиге, но не установлен в системе, устанавливаем его
 	if cfg.AutoStart && !isEnabled {
 		if err := autostartService.SetAutoStart(true); err != nil {
 			logger.Error("Ошибка установки автозапуска при старте", "error", err)
+			// Если не удалось установить, обновляем биндинг в false
+			autoStart.Set(false)
+		} else {
+			// Успешно установили, обновляем биндинг в true
+			autoStart.Set(true)
 		}
-	}
-
-	// Если автозапуск выключен в конфиге, но установлен в системе, убираем его
-	if !cfg.AutoStart && isEnabled {
+	} else if !cfg.AutoStart && isEnabled {
+		// Если автозапуск выключен в конфиге, но установлен в системе, убираем его
 		if err := autostartService.SetAutoStart(false); err != nil {
 			logger.Error("Ошибка отключения автозапуска при старте", "error", err)
 		}
-		// Обновляем конфигурацию, чтобы синхронизировать состояние
-		if err := configManager.SetAutoStart(false); err != nil {
-			logger.Error("Ошибка сохранения состояния автозапуска в конфиг", "error", err)
-		}
+		// Обновляем биндинг согласно конфигу
+		autoStart.Set(false)
+	} else {
+		// Состояния совпадают, просто устанавливаем биндинг из конфига
+		autoStart.Set(cfg.AutoStart)
 	}
 
 	return &App{
