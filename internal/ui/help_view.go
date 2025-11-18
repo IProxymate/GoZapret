@@ -234,6 +234,13 @@ func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updat
 		return
 	}
 
+	// Подготавливаем рабочую директорию
+	v.updateStatus(statusLabel, "Подготовка рабочей директории...")
+	if err := v.app.configManager.PrepareWorkingDirectory(); err != nil {
+		v.showUpdateError(progressDialog, "ошибка подготовки рабочей директории", err)
+		return
+	}
+
 	// Перезагружаем стратегии
 	v.updateStatus(statusLabel, "Загрузка стратегий...")
 	fyne.Do(func() {

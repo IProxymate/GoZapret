@@ -246,6 +246,12 @@ func (a *App) requestAssetsPath() {
 					return
 				}
 
+				// Подготавливаем рабочую директорию
+				if err := a.configManager.PrepareWorkingDirectory(); err != nil {
+					dialog.ShowError(fmt.Errorf("ошибка подготовки рабочей директории: %v", err), a.window)
+					return
+				}
+
 				// Загружаем стратегии из новой директории
 				a.loadStrategies(newPath)
 			}, a.window)

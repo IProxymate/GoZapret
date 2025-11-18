@@ -76,13 +76,19 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 		fyne.NewMenuItem("Настройки", v.showSettings),
 	)
 
+	// Меню "Списки"
+	listsMenu := fyne.NewMenu("Списки",
+		fyne.NewMenuItem("Включенные домены", v.showIncludedDomains),
+		fyne.NewMenuItem("Исключенные домены", v.showExcludedDomains),
+	)
+
 	// Меню "Помощь"
 	helpMenu := fyne.NewMenu("Помощь",
 		fyne.NewMenuItem("Проверить обновления", v.helpView.CheckForUpdates),
 		fyne.NewMenuItem("О программе", v.helpView.ShowAbout),
 	)
 
-	return fyne.NewMainMenu(fileMenu, helpMenu)
+	return fyne.NewMainMenu(fileMenu, listsMenu, helpMenu)
 }
 
 // buildControlCard создает карточку управления
@@ -520,4 +526,18 @@ func (v *MainView) clearCache() {
 func (v *MainView) showSettings() {
 	settingsView := NewSettingsView(v.app)
 	settingsView.Show()
+}
+
+// showIncludedDomains показывает окно редактирования включенных доменов
+func (v *MainView) showIncludedDomains() {
+	filePath := v.app.configManager.GetExtraListPath()
+	domainListView := NewDomainListView(v.app, filePath, "Включенные домены")
+	domainListView.Show()
+}
+
+// showExcludedDomains показывает окно редактирования исключенных доменов
+func (v *MainView) showExcludedDomains() {
+	filePath := v.app.configManager.GetExcludeListPath()
+	domainListView := NewDomainListView(v.app, filePath, "Исключенные домены")
+	domainListView.Show()
 }

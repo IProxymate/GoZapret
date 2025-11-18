@@ -35,6 +35,7 @@ func (s *Strategy) Validate() error {
 type Config struct {
 	LastStrategyName StrategyName `json:"last_strategy_name"`
 	AssetsPath       AssetsPath   `json:"assets_path"`
+	LastAssetsPath   AssetsPath   `json:"last_assets_path,omitempty"` // Последний путь, для которого копировались файлы
 	AutoStart        bool         `json:"auto_start"`
 	GameFilter       bool         `json:"game_filter"`
 	IpsetMode        string       `json:"ipset_mode"` // "any", "none", "loaded"

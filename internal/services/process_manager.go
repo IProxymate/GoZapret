@@ -20,8 +20,7 @@ import (
 // ProcessManager управляет процессами winws
 type ProcessManager struct {
 	currentProcess *domain.ProcessInfo
-	workingDir     string            // Постоянная рабочая директория
-	assetsPath     domain.AssetsPath // Путь к исходным файлам
+	workingDir     string // Постоянная рабочая директория
 	adminChecker   *AdminChecker
 	configManager  *config.Manager
 }
@@ -58,6 +57,13 @@ func (pm *ProcessManager) StartStrategy(strategy *domain.Strategy, assetsPath do
 		return domain.ErrProcessAlreadyRunning
 	}
 
+	// Получаем рабочую директорию
+	workDir := pm.getWorkingBinDir()
+	if workDir == "" {
+		slog.Error("Рабочая директория не подготовлена")
+		return fmt.Errorf("рабочая директория не подготовлена, необходимо сначала задать путь к ресурсам")
+	}
+
 	// Парсим bat файл
 	slog.Debug("Парсинг bat файла", "file", strategy.BatFile)
 	args, err := pm.parseBatFile(strategy.BatFile, assetsPath, gameFilterEnabled)
@@ -66,17 +72,8 @@ func (pm *ProcessManager) StartStrategy(strategy *domain.Strategy, assetsPath do
 		return err
 	}
 
-	// Подготавливаем рабочую среду
-	slog.Debug("Подготовка рабочей среды")
-	workDir, err := pm.prepareWorkEnvironment(assetsPath)
-	if err != nil {
-		slog.Error("Ошибка подготовки рабочей среды", "error", err)
-		return err
-	}
-	slog.Debug("Рабочая директория подготовлена", "dir", workDir)
-
 	// Запускаем процесс
-	slog.Debug("Запуск процесса winws", "args", args)
+	slog.Debug("Запуск процесса winws", "args", args, "workDir", workDir)
 	cmd, err := pm.startProcess(args, workDir)
 	if err != nil {
 		slog.Error("Ошибка запуска процесса", "error", err)
@@ -89,18 +86,14 @@ func (pm *ProcessManager) StartStrategy(strategy *domain.Strategy, assetsPath do
 		PID:       domain.ProcessID(cmd.Process.Pid),
 		Strategy:  strategy.Name,
 		StartedAt: time.Now(),
-		Status:    domain.ProcessStatusStarting, // Изменяем статус на "starting" при запуске
+		Status:    domain.ProcessStatusStarting,
 		Command:   cmd,
 	}
 
 	// Запускаем мониторинг процесса
 	go pm.monitorProcess(cmd)
 
-	// Статус будет обновлен через мониторинг процесса или проверку
-	// Это позволяет избежать гонки и корректно отображать статус
-
 	slog.Debug("Стратегия успешно запущена", "strategy", strategy.Name, "pid", cmd.Process.Pid)
-
 	return nil
 }
 
@@ -430,102 +423,18 @@ func (pm *ProcessManager) parseWinwsArgs(argsStr string, gameFilterEnabled bool)
 	return args
 }
 
-// prepareWorkEnvironment подготавливает рабочую среду для запуска
-func (pm *ProcessManager) prepareWorkEnvironment(assetsPath domain.AssetsPath) (string, error) {
-	// Используем постоянную рабочую директорию из конфига, если она задана
-	var workingDir string
-	if pm.configManager != nil {
-		configWorkingDir := pm.configManager.GetWorkingDir()
-		if configWorkingDir != "" {
-			workingDir = configWorkingDir
-		} else {
-			// Если в конфиге нет рабочей директории, используем стандартную
-			configDir, err := os.UserConfigDir()
-			if err != nil {
-				configDir = "."
-			}
-			workingDir = filepath.Join(configDir, "GoZapret", "working")
-			// Сохраняем в конфиг для будущего использования
-			pm.configManager.SetWorkingDir(workingDir)
-		}
-	} else {
-		// Если конфиг не задан, используем стандартную директорию
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			configDir = "."
-		}
-		workingDir = filepath.Join(configDir, "GoZapret", "working")
+// getWorkingBinDir возвращает путь к директории bin в рабочей директории
+func (pm *ProcessManager) getWorkingBinDir() string {
+	if pm.configManager == nil {
+		return ""
 	}
 
-	// Создаем рабочую директорию, если она не существует
-	if err := os.MkdirAll(workingDir, 0755); err != nil {
-		return "", domain.ErrTempDirCreateFailed
+	workingDir := pm.configManager.GetWorkingDir()
+	if workingDir == "" {
+		return ""
 	}
 
-	pm.workingDir = workingDir
-
-	binDir := filepath.Join(workingDir, "bin")
-	listsDir := filepath.Join(workingDir, "lists")
-
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		return "", domain.ErrTempDirCreateFailed
-	}
-
-	if err := os.MkdirAll(listsDir, 0755); err != nil {
-		return "", domain.ErrTempDirCreateFailed
-	}
-
-	if err := pm.copyRequiredFiles(assetsPath, binDir, listsDir); err != nil {
-		return "", err
-	}
-
-	return binDir, nil
-}
-
-// copyRequiredFiles копирует необходимые файлы в рабочую директорию
-func (pm *ProcessManager) copyRequiredFiles(assetsPath domain.AssetsPath, binDir, listsDir string) error {
-	binFiles := []string{
-		"winws.exe", "cygwin1.dll", "WinDivert.dll", "WinDivert64.sys",
-		"quic_initial_www_google_com.bin", "tls_clienthello_4pda_to.bin", "tls_clienthello_www_google_com.bin",
-	}
-
-	for _, fileName := range binFiles {
-		pm.copyFile(assetsPath, fileName, binDir, "bin")
-	}
-
-	listFiles := []string{
-		"list-general.txt", "list-exclude.txt", "list-google.txt",
-		"ipset-all.txt", "ipset-exclude.txt",
-	}
-
-	for _, fileName := range listFiles {
-		if err := pm.copyFile(assetsPath, fileName, listsDir, "lists"); err != nil {
-			emptyPath := filepath.Join(listsDir, fileName)
-			os.WriteFile(emptyPath, []byte(""), 0644)
-		}
-	}
-
-	return nil
-}
-
-// copyFile копирует файл из исходной директории в целевую
-func (pm *ProcessManager) copyFile(assetsPath domain.AssetsPath, fileName, targetDir, subDir string) error {
-	srcPath := filepath.Join(assetsPath.String(), subDir, fileName)
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		srcPath = filepath.Join(assetsPath.String(), fileName)
-	}
-
-	if _, err := os.Stat(srcPath); err != nil {
-		return err
-	}
-
-	data, err := os.ReadFile(srcPath)
-	if err != nil {
-		return err
-	}
-
-	dstPath := filepath.Join(targetDir, fileName)
-	return os.WriteFile(dstPath, data, 0755)
+	return filepath.Join(workingDir, "bin")
 }
 
 // startProcess запускает процесс winws
@@ -533,6 +442,13 @@ func (pm *ProcessManager) startProcess(args []string, workDir string) (*exec.Cmd
 	winwsPath := filepath.Join(workDir, "winws.exe")
 
 	pm.replacePathsInArgs(args, workDir)
+
+	// Добавляем аргументы для пользовательских списков доменов
+	args = pm.addCustomHostlistArgs(args)
+
+	// Логируем полную команду запуска
+	slog.Info("Запуск winws.exe", "executable", winwsPath, "args", args)
+	slog.Info("Полная команда", "command", fmt.Sprintf("%s %s", winwsPath, strings.Join(args, " ")))
 
 	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, winwsPath, args...)
@@ -549,6 +465,80 @@ func (pm *ProcessManager) startProcess(args []string, workDir string) (*exec.Cmd
 	return cmd, nil
 }
 
+// addCustomHostlistArgs добавляет аргументы для пользовательских списков доменов
+// --hostlist добавляется после первого существующего --hostlist в каждом профиле
+// --hostlist-exclude добавляется ОДИН РАЗ в каждый профиль (работает глобально для всех --hostlist в профиле)
+func (pm *ProcessManager) addCustomHostlistArgs(args []string) []string {
+	if pm.configManager == nil {
+		return args
+	}
+
+	extraListPath := pm.configManager.GetExtraListPath()
+	excludeListPath := pm.configManager.GetExcludeListPath()
+
+	// Проверяем, существуют ли файлы и не пусты ли они
+	extraExists := pm.isFileNotEmpty(extraListPath)
+	excludeExists := pm.isFileNotEmpty(excludeListPath)
+
+	if !extraExists && !excludeExists {
+		slog.Debug("Пользовательские списки доменов пусты или не существуют")
+		return args
+	}
+
+	// Создаем новый массив аргументов
+	newArgs := make([]string, 0, len(args)+20)
+
+	// Флаг: добавили ли мы уже наши аргументы в текущий профиль
+	addedInCurrentProfile := false
+
+	for i, arg := range args {
+		newArgs = append(newArgs, arg)
+
+		// Если встретили --new, сбрасываем флаг для нового профиля
+		if arg == "--new" {
+			addedInCurrentProfile = false
+			continue
+		}
+
+		// Проверяем, является ли это первым --hostlist= в профиле (не --hostlist-exclude и не --hostlist-domains)
+		if !addedInCurrentProfile &&
+			strings.HasPrefix(arg, "--hostlist=") &&
+			!strings.HasPrefix(arg, "--hostlist-exclude=") &&
+			!strings.HasPrefix(arg, "--hostlist-domains=") {
+
+			// Добавляем наш --hostlist для включенных доменов, если файл существует
+			if extraExists {
+				newArgs = append(newArgs, "--hostlist="+extraListPath)
+				slog.Debug("Добавлен --hostlist в профиль", "path", extraListPath, "position", i)
+			}
+
+			// Добавляем --hostlist-exclude для исключенных доменов, если файл существует
+			// Он работает глобально для всех --hostlist в профиле
+			if excludeExists {
+				newArgs = append(newArgs, "--hostlist-exclude="+excludeListPath)
+				slog.Debug("Добавлен --hostlist-exclude в профиль", "path", excludeListPath, "position", i)
+			}
+
+			// Отмечаем, что в этом профиле уже добавили наши аргументы
+			addedInCurrentProfile = true
+		}
+	}
+
+	slog.Info("Пользовательские списки доменов интегрированы в команду",
+		"extraList", extraExists, "excludeList", excludeExists)
+
+	return newArgs
+}
+
+// isFileNotEmpty проверяет, существует ли файл и не пуст ли он
+func (pm *ProcessManager) isFileNotEmpty(filePath string) bool {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+	return info.Size() > 0
+}
+
 // replacePathsInArgs заменяет относительные пути и переменные на абсолютные в аргументах
 func (pm *ProcessManager) replacePathsInArgs(args []string, workDir string) {
 	tempDir := filepath.Dir(workDir)
@@ -558,7 +548,7 @@ func (pm *ProcessManager) replacePathsInArgs(args []string, workDir string) {
 	slog.Debug("Замена путей в аргументах", "binDir", binDir, "listsDir", listsDir)
 
 	for i, arg := range args {
-		// Сначала заменяем переменные %BIN% и %LISTS% на пути
+		// Заменяем переменные %BIN% и %LISTS% на пути
 		arg = strings.ReplaceAll(arg, "%BIN%", binDir+string(filepath.Separator))
 		arg = strings.ReplaceAll(arg, "%LISTS%", listsDir+string(filepath.Separator))
 
