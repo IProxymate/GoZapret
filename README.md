@@ -112,11 +112,6 @@ fyne package -os windows -icon ./assets/icon256.png -release -app-id gozapret.co
 
 Скачайте последний релиз из раздела Releases.
 
-
-## 📝 Лицензия
-
-Этот проект является форком [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube).
-
 ## 🙏 Благодарности
 
 - [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) - за удобный запуск различных стратегий
