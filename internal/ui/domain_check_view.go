@@ -31,7 +31,7 @@ func NewDomainCheckView(app fyne.App, window fyne.Window) *DomainCheckView {
 func (v *DomainCheckView) Show() {
 	// Создаем окно
 	checkWindow := v.app.NewWindow("Проверить домен")
-	checkWindow.Resize(fyne.NewSize(600, 400))
+	checkWindow.Resize(fyne.NewSize(700, 500))
 	checkWindow.CenterOnScreen()
 
 	// Поле ввода домена
