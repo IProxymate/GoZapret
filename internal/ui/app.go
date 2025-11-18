@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"time"
 
 	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/domain"
@@ -270,6 +271,9 @@ func (a *App) handleAutostart() {
 				a.logger.Error("Ошибка запуска стратегии при автозапуске", "strategy", strategy.Name, "error", err)
 			} else {
 				a.logger.Debug("Стратегия запущена при автозапуске", "strategy", strategy.Name)
+
+				// Запускаем горутину для обновления статуса после запуска процесса
+				go a.updateStatusAfterAutostart()
 			}
 		} else {
 			a.logger.Warn("Последняя стратегия не найдена при автозапуске", "strategy", lastStrategyName, "error", err)
@@ -280,6 +284,32 @@ func (a *App) handleAutostart() {
 
 	// Скрываем окно без его предварительного показа
 	a.window.Hide()
+}
+
+// updateStatusAfterAutostart обновляет статус UI после автозапуска с задержкой
+func (a *App) updateStatusAfterAutostart() {
+	// Ждем некоторое время, чтобы процесс успел запуститься
+	// Проверяем статус несколько раз с интервалом
+	maxAttempts := 10
+	interval := 500 * time.Millisecond
+
+	for i := 0; i < maxAttempts; i++ {
+		time.Sleep(interval)
+
+		// Проверяем, запущен ли процесс
+		if a.processManager.IsRunning() {
+			a.logger.Debug("Процесс обнаружен после автозапуска", "attempt", i+1)
+			// Обновляем статус в главном потоке UI
+			a.updateStatus()
+			return
+		}
+
+		a.logger.Debug("Ожидание запуска процесса", "attempt", i+1)
+	}
+
+	// Если после всех попыток процесс не обнаружен, все равно обновляем статус
+	a.logger.Warn("Процесс не обнаружен после автозапуска")
+	a.updateStatus()
 }
 
 // updateStatus обновляет статус приложения
