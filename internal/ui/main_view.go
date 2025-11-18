@@ -84,6 +84,8 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 
 	// Меню "Помощь"
 	helpMenu := fyne.NewMenu("Помощь",
+		fyne.NewMenuItem("Проверить домен", v.showDomainCheck),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Проверить обновления", v.helpView.CheckForUpdates),
 		fyne.NewMenuItem("О программе", v.helpView.ShowAbout),
 	)
@@ -540,4 +542,10 @@ func (v *MainView) showExcludedDomains() {
 	filePath := v.app.configManager.GetExcludeListPath()
 	domainListView := NewDomainListView(v.app, filePath, "Исключенные домены")
 	domainListView.Show()
+}
+
+// showDomainCheck показывает окно проверки домена
+func (v *MainView) showDomainCheck() {
+	domainCheckView := NewDomainCheckView(v.app.fyneApp, v.app.window)
+	domainCheckView.Show()
 }
