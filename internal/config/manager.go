@@ -37,9 +37,9 @@ func (m *Manager) Load() error {
 			m.config = &domain.Config{
 				LastStrategyName: "",
 				AssetsPath:       "",
-				AutoStart:        false,
-				GameFilter:       true,
-				IpsetMode:        "any",
+				AutoStart:        true,
+				GameFilter:       false,
+				IpsetMode:        "none",
 				Version:          "1.0.0",
 				UpdatedAt:        time.Now(),
 				WorkingDir:       "",
