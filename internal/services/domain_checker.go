@@ -7,7 +7,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // DomainCheckResult содержит результаты проверки домена
@@ -64,6 +67,9 @@ func (dc *DomainChecker) CheckDomain(domain string) *DomainCheckResult {
 		"-k",
 		url,
 	)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
 
 	// Выполняем команду
 	output, err := cmd.Output()
