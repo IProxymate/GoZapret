@@ -7,10 +7,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
-	"golang.org/x/sys/windows"
+	"github.com/IProxymate/GoZapret/internal/utils"
 )
 
 // DomainCheckResult содержит результаты проверки домена
@@ -58,7 +57,7 @@ func (dc *DomainChecker) CheckDomain(domain string) *DomainCheckResult {
 	// --max-time 10 - максимальное время ожидания
 	// -L - следовать редиректам
 	// -k - игнорировать ошибки SSL (для тестирования)
-	cmd := exec.CommandContext(ctx, "curl",
+	output, err := utils.OutputHiddenContext(ctx, "curl",
 		"-o", "nul",
 		"-s",
 		"-w", "%{http_code};%{time_total}",
@@ -67,12 +66,6 @@ func (dc *DomainChecker) CheckDomain(domain string) *DomainCheckResult {
 		"-k",
 		url,
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-
-	// Выполняем команду
-	output, err := cmd.Output()
 	if err != nil {
 		// Проверяем, не истек ли таймаут контекста
 		if ctx.Err() == context.DeadlineExceeded {

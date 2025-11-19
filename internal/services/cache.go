@@ -2,11 +2,9 @@ package services
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 
-	"golang.org/x/sys/windows"
+	"github.com/IProxymate/GoZapret/internal/utils"
 )
 
 // CacheService управляет кэшем Discord
@@ -39,12 +37,7 @@ func (c *CacheService) ClearDiscordCache() error {
 
 // KillDiscordProcesses убивает все процессы Discord
 func (c *CacheService) KillDiscordProcesses() error {
-	cmd := exec.Command("taskkill", "/IM", "Discord.exe", "/F")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-
 	// Игнорируем ошибку, если процесс не найден
-	cmd.Run()
+	utils.RunHidden("taskkill", "/IM", "Discord.exe", "/F")
 	return nil
 }

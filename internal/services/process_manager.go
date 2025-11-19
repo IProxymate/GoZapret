@@ -13,6 +13,7 @@ import (
 
 	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/domain"
+	"github.com/IProxymate/GoZapret/internal/utils"
 
 	"golang.org/x/sys/windows"
 )
@@ -262,12 +263,7 @@ func (pm *ProcessManager) GetCurrentProcess() *domain.ProcessInfo {
 
 // IsWinwsProcessRunning проверяет, запущен ли процесс winws.exe в системе
 func (pm *ProcessManager) IsWinwsProcessRunning() bool {
-	cmd := exec.Command("tasklist", "/FI", "IMAGENAME eq winws.exe")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("tasklist", "/FI", "IMAGENAME eq winws.exe")
 	if err != nil {
 		return false
 	}
@@ -451,12 +447,7 @@ func (pm *ProcessManager) startProcess(args []string, workDir string) (*exec.Cmd
 	slog.Info("Полная команда", "command", fmt.Sprintf("%s %s", winwsPath, strings.Join(args, " ")))
 
 	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, winwsPath, args...)
-	cmd.Dir = workDir
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
+	cmd := utils.NewHiddenCommandContext(ctx, winwsPath, args...)
 
 	if err := cmd.Start(); err != nil {
 		return nil, domain.ErrProcessStartFailed
@@ -609,12 +600,7 @@ func (pm *ProcessManager) forceKill(cmd *exec.Cmd) error {
 
 // killAllWinwsProcesses убивает все процессы winws.exe в системе
 func (pm *ProcessManager) killAllWinwsProcesses() error {
-	cmd := exec.Command("taskkill", "/IM", "winws.exe", "/F")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-
-	err := cmd.Run()
+	err := utils.RunHidden("taskkill", "/IM", "winws.exe", "/F")
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if exitError.ExitCode() == 128 || exitError.ExitCode() == 129 {

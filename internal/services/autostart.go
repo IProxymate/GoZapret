@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
-	"syscall"
 
-	"golang.org/x/sys/windows"
+	"github.com/IProxymate/GoZapret/internal/utils"
+
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -25,11 +24,7 @@ func NewAutostartService() *AutostartService {
 
 // IsTaskSchedulerEnabled проверяет существование задачи в планировщике
 func (a *AutostartService) IsTaskSchedulerEnabled() (bool, error) {
-	cmd := exec.Command("schtasks", "/query", "/tn", taskName)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-	err := cmd.Run()
+	err := utils.RunHidden("schtasks", "/query", "/tn", taskName)
 	return err == nil, nil
 }
 
@@ -104,11 +99,7 @@ func (a *AutostartService) CreateScheduledTask() error {
 	tempFile.Close()
 
 	// Создаем задачу через schtasks
-	cmd := exec.Command("schtasks", "/create", "/tn", taskName, "/xml", tempFile.Name(), "/f")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-	output, err := cmd.CombinedOutput()
+	output, err := utils.CombinedOutputHidden("schtasks", "/create", "/tn", taskName, "/xml", tempFile.Name(), "/f")
 	if err != nil {
 		slog.Error("Не удалось создать задачу автозапуска", "error", err, "output", string(output))
 		return fmt.Errorf("не удалось создать задачу: %v, вывод: %s", err, string(output))
@@ -120,11 +111,7 @@ func (a *AutostartService) CreateScheduledTask() error {
 
 // RemoveScheduledTask удаляет задачу из планировщика
 func (a *AutostartService) RemoveScheduledTask() error {
-	cmd := exec.Command("schtasks", "/delete", "/tn", taskName, "/f")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-	return cmd.Run()
+	return utils.RunHidden("schtasks", "/delete", "/tn", taskName, "/f")
 }
 
 // IsRegistryEnabled проверяет старый способ через реестр

@@ -2,14 +2,11 @@ package services
 
 import (
 	"log/slog"
-	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
-
-	"golang.org/x/sys/windows"
+	"github.com/IProxymate/GoZapret/internal/utils"
 )
 
 // DiagnosticsService выполняет диагностику системы
@@ -22,14 +19,6 @@ func NewDiagnosticsService(adminChecker *AdminChecker) *DiagnosticsService {
 	return &DiagnosticsService{
 		adminChecker: adminChecker,
 	}
-}
-
-func (d *DiagnosticsService) createNoWindowCommand(name string, arg ...string) *exec.Cmd {
-	cmd := exec.Command(name, arg...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-	return cmd
 }
 
 // RunAll выполняет все диагностические проверки
@@ -101,12 +90,7 @@ func (d *DiagnosticsService) checkAdminRights() *domain.DiagnosticResult {
 func (d *DiagnosticsService) checkWinDivertDriver() *domain.DiagnosticResult {
 	start := time.Now()
 
-	cmd := exec.Command("sc", "query", "WinDivert")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query", "WinDivert")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка драйвера WinDivert",
@@ -134,12 +118,7 @@ func (d *DiagnosticsService) checkWinDivertDriver() *domain.DiagnosticResult {
 func (d *DiagnosticsService) checkNetworkConnectivity() *domain.DiagnosticResult {
 	start := time.Now()
 
-	cmd := exec.Command("ping", "-n", "1", "8.8.8.8")
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
-
-	err := cmd.Run()
+	err := utils.RunHidden("ping", "-n", "1", "8.8.8.8")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка сетевого подключения",
@@ -164,8 +143,7 @@ func (d *DiagnosticsService) checkNetworkConnectivity() *domain.DiagnosticResult
 
 func (d *DiagnosticsService) checkWinws() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("tasklist", "/FI", "IMAGENAME eq winws.exe")
-	winwsOutput, err := cmd.Output()
+	winwsOutput, err := utils.OutputHidden("tasklist", "/FI", "IMAGENAME eq winws.exe")
 	winwsRunning := strings.Contains(string(winwsOutput), "winws.exe")
 
 	result := &domain.DiagnosticResult{
@@ -199,8 +177,7 @@ func (d *DiagnosticsService) checkConflictingBypasses() *domain.DiagnosticResult
 	var foundConflicts []string
 
 	for _, service := range conflictingServices {
-		cmd := d.createNoWindowCommand("sc", "query", service)
-		output, err := cmd.CombinedOutput()
+		output, err := utils.CombinedOutputHidden("sc", "query", service)
 		if err == nil {
 			// Проверяем, что вывод содержит информацию о сервисе, а не только ошибку
 			if !strings.Contains(string(output), "1060") { // ERROR_SERVICE_DOES_NOT_EXIST
@@ -233,8 +210,7 @@ func (d *DiagnosticsService) checkConflictingBypasses() *domain.DiagnosticResult
 // checkBaseFilteringEngine проверяет сервис Base Filtering Engine
 func (d *DiagnosticsService) checkBaseFilteringEngine() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("sc", "query", "BFE")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query", "BFE")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка сервиса Base Filtering Engine",
@@ -269,10 +245,9 @@ func (d *DiagnosticsService) checkBaseFilteringEngine() *domain.DiagnosticResult
 // checkProxySettings проверяет настройки системного прокси
 func (d *DiagnosticsService) checkProxySettings() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("reg", "query",
+	output, err := utils.OutputHidden("reg", "query",
 		"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
 		"/v", "ProxyEnable")
-	output, err := cmd.Output()
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка настроек системного прокси",
@@ -295,10 +270,9 @@ func (d *DiagnosticsService) checkProxySettings() *domain.DiagnosticResult {
 	}
 
 	// Получаем адрес прокси-сервера
-	cmd = d.createNoWindowCommand("reg", "query",
+	output, _ = utils.OutputHidden("reg", "query",
 		"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
 		"/v", "ProxyServer")
-	output, _ = cmd.Output()
 
 	proxyServer := ""
 	for _, line := range strings.Split(string(output), "\n") {
@@ -323,8 +297,7 @@ func (d *DiagnosticsService) checkProxySettings() *domain.DiagnosticResult {
 // checkTCPTimestamps проверяет настройки TCP timestamps
 func (d *DiagnosticsService) checkTCPTimestamps() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("netsh", "interface", "tcp", "show", "global")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("netsh", "interface", "tcp", "show", "global")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка настроек TCP timestamps",
@@ -351,8 +324,7 @@ func (d *DiagnosticsService) checkTCPTimestamps() *domain.DiagnosticResult {
 	}
 
 	// Пытаемся включить timestamps
-	cmd = d.createNoWindowCommand("netsh", "interface", "tcp", "set", "global", "timestamps=enabled")
-	cmd.Run() // Игнорируем ошибку
+	utils.RunHidden("netsh", "interface", "tcp", "set", "global", "timestamps=enabled") // Игнорируем ошибку
 
 	result.Success = false
 	result.Message = "ERROR"
@@ -365,8 +337,7 @@ func (d *DiagnosticsService) checkTCPTimestamps() *domain.DiagnosticResult {
 // checkAdguard проверяет наличие Adguard сервиса
 func (d *DiagnosticsService) checkAdguard() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("tasklist", "/FI", "IMAGENAME eq AdguardSvc.exe")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("tasklist", "/FI", "IMAGENAME eq AdguardSvc.exe")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка наличия Adguard сервиса",
@@ -398,8 +369,7 @@ func (d *DiagnosticsService) checkAdguard() *domain.DiagnosticResult {
 // checkKillerServices проверяет наличие конфликтующих Killer сервисов
 func (d *DiagnosticsService) checkKillerServices() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("sc", "query")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка наличия конфликтующих Killer сервисов",
@@ -434,8 +404,7 @@ func (d *DiagnosticsService) checkKillerServices() *domain.DiagnosticResult {
 // checkIntelConnectivity проверяет наличие конфликтующего Intel сервиса
 func (d *DiagnosticsService) checkIntelConnectivity() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("sc", "query")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка наличия конфликтующего Intel сервиса",
@@ -473,8 +442,7 @@ func (d *DiagnosticsService) checkIntelConnectivity() *domain.DiagnosticResult {
 // checkCheckPoint проверяет наличие сервисов Check Point
 func (d *DiagnosticsService) checkCheckPoint() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("sc", "query")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка наличия сервисов Check Point",
@@ -513,8 +481,7 @@ func (d *DiagnosticsService) checkCheckPoint() *domain.DiagnosticResult {
 // checkSmartByte проверяет наличие сервисов SmartByte
 func (d *DiagnosticsService) checkSmartByte() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("sc", "query")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка наличия сервисов SmartByte",
@@ -549,8 +516,7 @@ func (d *DiagnosticsService) checkSmartByte() *domain.DiagnosticResult {
 // checkVPNServices проверяет наличие VPN сервисов
 func (d *DiagnosticsService) checkVPNServices() *domain.DiagnosticResult {
 	start := time.Now()
-	cmd := d.createNoWindowCommand("sc", "query")
-	output, err := cmd.Output()
+	output, err := utils.OutputHidden("sc", "query")
 
 	result := &domain.DiagnosticResult{
 		Name:      "Проверка наличия VPN сервисов",
