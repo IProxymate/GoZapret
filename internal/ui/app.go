@@ -12,6 +12,7 @@ import (
 	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/services"
+	"github.com/IProxymate/GoZapret/internal/utils"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -41,6 +42,7 @@ type App struct {
 	cacheService     *services.CacheService
 	autostartService *services.AutostartService
 	updateService    *services.UpdateService
+	singleInstance   *utils.SingleInstance
 
 	// Биндинги для UI
 	statusText       binding.String
@@ -60,7 +62,7 @@ type App struct {
 }
 
 // NewApp создает новое приложение
-func NewApp(assets embed.FS, logger *slog.Logger) *App {
+func NewApp(assets embed.FS, logger *slog.Logger, singleInstance *utils.SingleInstance) *App {
 	fyneApp := app.NewWithID("com.zapret.gui")
 
 	// Получаем путь к конфигурации
@@ -165,6 +167,7 @@ func NewApp(assets embed.FS, logger *slog.Logger) *App {
 		cacheService:     cacheService,
 		autostartService: autostartService,
 		updateService:    updateService,
+		singleInstance:   singleInstance,
 		statusText:       statusText,
 		isRunning:        isRunning,
 		selectedStrategy: selectedStrategy,
@@ -179,6 +182,16 @@ func NewApp(assets embed.FS, logger *slog.Logger) *App {
 
 // Run запускает приложение
 func (a *App) Run() {
+	// Устанавливаем callback для активации окна
+	a.singleInstance.SetActivateCallback(func() {
+		a.ActivateWindow()
+	})
+
+	// Запускаем IPC сервер для приема команд активации
+	if err := a.singleInstance.StartIPCServer(); err != nil {
+		a.logger.Warn("Не удалось запустить IPC сервер", "error", err)
+	}
+
 	// Проверяем аргументы командной строки
 	autostart := slices.Contains(os.Args[1:], "/autostart")
 
@@ -189,6 +202,7 @@ func (a *App) Run() {
 		a.fyneApp.SetIcon(iconResource)
 	}
 
+	// Создаем окно с фиксированным заголовком для поиска
 	a.window = a.fyneApp.NewWindow("GoZapret")
 
 	// Настройка сворачивания в трей
@@ -463,4 +477,21 @@ func (a *App) loadIconData() ([]byte, error) {
 
 	// Если оба варианта неудачны, возвращаем ошибку
 	return nil, err
+}
+
+// ActivateWindow активирует и показывает главное окно приложения
+func (a *App) ActivateWindow() {
+	a.logger.Debug("Активация окна приложения")
+
+	// Используем fyne.Do для выполнения в главном потоке UI
+	fyne.Do(func() {
+		if a.window != nil {
+			a.logger.Debug("Показ и фокусировка окна")
+			a.window.Show()
+			a.window.RequestFocus()
+			a.logger.Info("Окно успешно активировано")
+		} else {
+			a.logger.Warn("Окно не инициализировано")
+		}
+	})
 }

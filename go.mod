@@ -5,6 +5,7 @@ go 1.24.0
 require golang.org/x/sys v0.38.0
 
 require (
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/nwaples/rardecode v1.1.3 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
