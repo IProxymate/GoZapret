@@ -74,13 +74,11 @@ func (pm *ProcessManager) StartStrategy(strategy *domain.Strategy, assetsPath do
 	}
 
 	// Запускаем процесс
-	slog.Debug("Запуск процесса winws", "args", args, "workDir", workDir)
 	cmd, err := pm.startProcess(args, workDir)
 	if err != nil {
 		slog.Error("Ошибка запуска процесса", "error", err)
 		return err
 	}
-	slog.Debug("Процесс winws запущен", "pid", cmd.Process.Pid, "strategy", strategy.Name)
 
 	// Сохраняем информацию о процессе
 	pm.currentProcess = &domain.ProcessInfo{
@@ -164,7 +162,6 @@ func (pm *ProcessManager) StopProcess() error {
 func (pm *ProcessManager) IsRunning() bool {
 	if pm.currentProcess == nil {
 		// Если внутреннее состояние отсутствует, проверяем наличие процесса winws.exe в системе
-		slog.Debug("Проверка процесса: currentProcess == nil, проверяем наличие winws.exe в системе")
 		isRunning := pm.IsWinwsProcessRunning()
 		slog.Debug("Результат проверки процесса winws.exe в системе", "running", isRunning)
 		return isRunning
@@ -443,8 +440,7 @@ func (pm *ProcessManager) startProcess(args []string, workDir string) (*exec.Cmd
 	args = pm.addCustomHostlistArgs(args)
 
 	// Логируем полную команду запуска
-	slog.Info("Запуск winws.exe", "executable", winwsPath, "args", args)
-	slog.Info("Полная команда", "command", fmt.Sprintf("%s %s", winwsPath, strings.Join(args, " ")))
+	slog.Debug("Запуск winws.exe", "executable", winwsPath, "args", args)
 
 	ctx := context.Background()
 	cmd := utils.NewHiddenCommandContext(ctx, winwsPath, args...)

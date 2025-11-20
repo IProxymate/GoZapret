@@ -104,7 +104,15 @@ func New(cfg *Config) (*slog.Logger, error) {
 	case "file":
 		writer = createFileWriter(cfg)
 	case "both":
-		writer = io.MultiWriter(os.Stdout, createFileWriter(cfg))
+		fileWriter := createFileWriter(cfg)
+		// Проверяем доступность stdout
+		if isStdoutAvailable() {
+			writer = io.MultiWriter(os.Stdout, fileWriter)
+		} else {
+			// Если stdout недоступен (например, при запуске через планировщик задач),
+			// используем только файловый вывод
+			writer = fileWriter
+		}
 	default:
 		writer = os.Stdout
 	}
@@ -135,6 +143,13 @@ func New(cfg *Config) (*slog.Logger, error) {
 	}
 
 	return slog.New(handler), nil
+}
+
+// isStdoutAvailable проверяет, доступен ли stdout для записи
+func isStdoutAvailable() bool {
+	// Пробуем получить информацию о файле stdout
+	_, err := os.Stdout.Stat()
+	return err == nil
 }
 
 // createFileWriter создает writer для записи в файл с ротацией

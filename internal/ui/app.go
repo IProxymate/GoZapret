@@ -201,20 +201,22 @@ func (a *App) Run() {
 	a.mainView = NewMainView(a)
 	a.window.SetContent(a.mainView.Build())
 
-	// Обновляем статус
-	a.updateStatus()
-
 	// Если запуск с флагом /autostart, запускаем стратегию без показа окна
 	if autostart {
 		a.handleAutostart()
+		// Обновляем статус
+		a.updateStatus()
 		// Запускаем приложение в фоновом режиме (в трее)
 		a.fyneApp.Run()
 	} else {
+		// Обновляем статус
+		a.updateStatus()
 		// Обычный режим - показываем окно
 		a.window.Resize(fyne.NewSize(800, 600))
 		a.window.CenterOnScreen()
 		a.window.ShowAndRun()
 	}
+
 }
 
 // requestAssetsPath запрашивает у пользователя путь к файлам zapret
@@ -277,9 +279,6 @@ func (a *App) handleAutostart() {
 				a.logger.Error("Ошибка запуска стратегии при автозапуске", "strategy", strategy.Name, "error", err)
 			} else {
 				a.logger.Debug("Стратегия запущена при автозапуске", "strategy", strategy.Name)
-
-				// Запускаем горутину для обновления статуса после запуска процесса
-				go a.updateStatusAfterAutostart()
 			}
 		} else {
 			a.logger.Warn("Последняя стратегия не найдена при автозапуске", "strategy", lastStrategyName, "error", err)
