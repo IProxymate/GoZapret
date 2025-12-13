@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
-	"github.com/IProxymate/GoZapret/internal/services"
+	"github.com/IProxymate/GoZapret/internal/services/updates"
 	"github.com/IProxymate/GoZapret/internal/utils"
 
 	"fyne.io/fyne/v2"
@@ -75,13 +75,13 @@ func (v *HelpView) CheckForUpdates() {
 }
 
 // checkVersion проверяет версию на GitHub
-func (v *HelpView) checkVersion() (*services.VersionInfo, error) {
+func (v *HelpView) checkVersion() (*updates.VersionInfo, error) {
 	cfg := v.app.configManager.GetConfig()
 	return v.app.updateService.CheckForUpdates(cfg.Version)
 }
 
 // handleVersionCheckResult обрабатывает результат проверки версии
-func (v *HelpView) handleVersionCheckResult(versionInfo *services.VersionInfo, err error) {
+func (v *HelpView) handleVersionCheckResult(versionInfo *updates.VersionInfo, err error) {
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("ошибка проверки обновлений:\n%w", err), v.app.window)
 		return
@@ -98,7 +98,7 @@ func (v *HelpView) handleVersionCheckResult(versionInfo *services.VersionInfo, e
 }
 
 // showUpdateDialog показывает диалог с вариантами обновления
-func (v *HelpView) showUpdateDialog(versionInfo *services.VersionInfo) {
+func (v *HelpView) showUpdateDialog(versionInfo *updates.VersionInfo) {
 	message := fmt.Sprintf(`Доступна новая версия!
 
 Текущая версия: %s
@@ -136,7 +136,7 @@ func (v *HelpView) showUpdateDialog(versionInfo *services.VersionInfo) {
 }
 
 // updateCurrentVersion обновляет текущую версию
-func (v *HelpView) updateCurrentVersion(versionInfo *services.VersionInfo) {
+func (v *HelpView) updateCurrentVersion(versionInfo *updates.VersionInfo) {
 	assetsPath := v.app.configManager.GetAssetsPath()
 	if assetsPath == "" {
 		dialog.ShowError(fmt.Errorf("путь к ресурсам не установлен"), v.app.window)
@@ -192,7 +192,7 @@ func (v *HelpView) captureCurrentState() *updateState {
 }
 
 // performUpdate выполняет процесс обновления
-func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updateState, statusLabel *widget.Label, progressDialog dialog.Dialog) {
+func (v *HelpView) performUpdate(versionInfo *updates.VersionInfo, state *updateState, statusLabel *widget.Label, progressDialog dialog.Dialog) {
 	// Создаем временную директорию
 	tempDir, err := os.MkdirTemp("", "zapret_update_*")
 	if err != nil {
@@ -260,7 +260,7 @@ func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updat
 }
 
 // extractArchive распаковывает архив
-func (v *HelpView) extractArchive(result *services.DownloadResult) (string, error) {
+func (v *HelpView) extractArchive(result *updates.DownloadResult) (string, error) {
 	assetsPath := v.app.configManager.GetAssetsPath()
 	parentDir := filepath.Dir(assetsPath.String())
 
@@ -312,7 +312,7 @@ func (v *HelpView) showUpdateError(progressDialog dialog.Dialog, context string,
 }
 
 // showUpdateSuccess показывает успешное завершение обновления
-func (v *HelpView) showUpdateSuccess(progressDialog dialog.Dialog, versionInfo *services.VersionInfo, newAssetsPath domain.AssetsPath, state *updateState) {
+func (v *HelpView) showUpdateSuccess(progressDialog dialog.Dialog, versionInfo *updates.VersionInfo, newAssetsPath domain.AssetsPath, state *updateState) {
 	fyne.Do(func() {
 		progressDialog.Hide()
 
@@ -338,7 +338,7 @@ func (v *HelpView) showUpdateSuccess(progressDialog dialog.Dialog, versionInfo *
 }
 
 // downloadSeparately скачивает обновление в выбранную папку
-func (v *HelpView) downloadSeparately(versionInfo *services.VersionInfo) {
+func (v *HelpView) downloadSeparately(versionInfo *updates.VersionInfo) {
 	fileDialog := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
 		if err != nil || uri == nil {
 			return
@@ -351,7 +351,7 @@ func (v *HelpView) downloadSeparately(versionInfo *services.VersionInfo) {
 }
 
 // performDownload выполняет загрузку в указанную директорию
-func (v *HelpView) performDownload(versionInfo *services.VersionInfo, downloadPath string) {
+func (v *HelpView) performDownload(versionInfo *updates.VersionInfo, downloadPath string) {
 	progressDialog := v.createProgressDialog("Загрузка", "Загрузка обновления...")
 	progressDialog.Show()
 

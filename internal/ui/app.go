@@ -12,6 +12,13 @@ import (
 	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/services"
+	"github.com/IProxymate/GoZapret/internal/services/autostart"
+	"github.com/IProxymate/GoZapret/internal/services/diagnostics"
+	"github.com/IProxymate/GoZapret/internal/services/diagnostics/checks"
+	"github.com/IProxymate/GoZapret/internal/services/ipset"
+	"github.com/IProxymate/GoZapret/internal/services/process"
+	"github.com/IProxymate/GoZapret/internal/services/strategy"
+	"github.com/IProxymate/GoZapret/internal/services/updates"
 	"github.com/IProxymate/GoZapret/internal/utils"
 
 	"fyne.io/fyne/v2"
@@ -34,14 +41,14 @@ type App struct {
 
 	// Сервисы
 	configManager    *config.Manager
-	strategyService  *services.StrategyService
-	processManager   *services.ProcessManager
+	strategyService  *strategy.Service
+	processManager   *process.Manager
 	adminChecker     *services.AdminChecker
-	diagnostics      *services.DiagnosticsService
-	ipsetService     *services.IpsetService
+	diagnostics      *diagnostics.Service
+	ipsetService     *ipset.Service
 	cacheService     *services.CacheService
-	autostartService *services.AutostartService
-	updateService    *services.UpdateService
+	autostartService *autostart.Service
+	updateService    *updates.Service
 	singleInstance   *utils.SingleInstance
 
 	// Биндинги для UI
@@ -75,13 +82,38 @@ func NewApp(assets embed.FS, logger *slog.Logger, singleInstance *utils.SingleIn
 	// Инициализируем сервисы
 	configManager := config.NewManager(configPath)
 	adminChecker := services.NewAdminChecker()
-	strategyService := services.NewStrategyService()
-	processManager := services.NewProcessManager(adminChecker, configManager)
-	diagnostics := services.NewDiagnosticsService(adminChecker)
-	ipsetService := services.NewIpsetService()
+	strategyService := strategy.NewService()
+
+	// Инициализация ProcessManager
+	processExecutor := process.NewProcessExecutor()
+	processMonitor := process.NewWindowsProcessMonitor()
+	batParser := process.NewBatParser()
+	argsBuilder := process.NewArgsBuilder(configManager)
+	processManager := process.NewManager(processExecutor, processMonitor, batParser, argsBuilder, adminChecker, configManager)
+
+	// Инициализация DiagnosticsService
+	diagnosticCheckers := []diagnostics.Checker{
+		checks.NewAdminCheck(adminChecker),
+		checks.NewWinDivertCheck(),
+		checks.NewNetworkCheck(),
+		checks.NewWinwsCheck(),
+		checks.NewBFECheck(),
+		checks.NewConflictingBypassesCheck(),
+		checks.NewProxyCheck(),
+		checks.NewTCPTimestampsCheck(),
+		checks.NewAdguardCheck(),
+		checks.NewKillerServicesCheck(),
+		checks.NewIntelConnectivityCheck(),
+		checks.NewCheckPointCheck(),
+		checks.NewSmartByteCheck(),
+		checks.NewVPNServicesCheck(),
+	}
+	diagnosticsService := diagnostics.NewService(diagnosticCheckers)
+
+	ipsetService := ipset.NewService()
 	cacheService := services.NewCacheService()
-	autostartService := services.NewAutostartService()
-	updateService := services.NewUpdateService()
+	autostartService := autostart.NewService()
+	updateService := updates.NewService("https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest")
 
 	// Загружаем конфигурацию
 	if err := configManager.Load(); err != nil {
@@ -162,7 +194,7 @@ func NewApp(assets embed.FS, logger *slog.Logger, singleInstance *utils.SingleIn
 		strategyService:  strategyService,
 		processManager:   processManager,
 		adminChecker:     adminChecker,
-		diagnostics:      diagnostics,
+		diagnostics:      diagnosticsService,
 		ipsetService:     ipsetService,
 		cacheService:     cacheService,
 		autostartService: autostartService,
@@ -210,6 +242,13 @@ func (a *App) Run() {
 
 	// Загружаем стратегии, если путь к ресурсам установлен
 	a.requestAssetsPath()
+
+	// Устанавливаем callback для обработки ошибок процесса
+	a.processManager.SetErrorCallback(func(strategyName string, errorMsg string) {
+		fyne.Do(func() {
+			a.showProcessError(strategyName, errorMsg)
+		})
+	})
 
 	// Создаем главный вид
 	a.mainView = NewMainView(a)
@@ -448,15 +487,53 @@ func (a *App) setupTray(icon []byte) {
 			a.window.Hide()
 		})
 
-		// Устанавливаем иконку в трее с задержкой, чтобы дать время трю быть готовым
+		// Устанавливаем иконку в трее с задержкой и повторными попытками
 		go func() {
-			// Используем Fyne таймер для отложенной установки иконки
-			fyne.Do(func() {
-				// Небольшая задержка перед установкой иконки
-				trayIcon := fyne.NewStaticResource("tray-icon.png", icon)
-				deskApp.SetSystemTrayIcon(trayIcon)
-				a.logger.Debug("Иконка в трее установлена")
-			})
+			// Начальная задержка перед первой попыткой (для автозапуска)
+			time.Sleep(2 * time.Second)
+
+			trayIcon := fyne.NewStaticResource("tray-icon.png", icon)
+			maxAttempts := 5
+			baseDelay := 1 * time.Second
+
+			for attempt := 1; attempt <= maxAttempts; attempt++ {
+				a.logger.Debug("Попытка установки иконки в трее", "attempt", attempt, "max", maxAttempts)
+
+				// Пытаемся установить иконку в UI-потоке
+				success := make(chan bool, 1)
+				fyne.Do(func() {
+					defer func() {
+						if r := recover(); r != nil {
+							a.logger.Warn("Паника при установке иконки в трее", "error", r, "attempt", attempt)
+							success <- false
+						}
+					}()
+
+					// Попытка установить иконку
+					deskApp.SetSystemTrayIcon(trayIcon)
+					success <- true
+				})
+
+				// Ждем результата с таймаутом
+				select {
+				case ok := <-success:
+					if ok {
+						a.logger.Info("Иконка в трее успешно установлена", "attempt", attempt)
+						return
+					}
+				case <-time.After(3 * time.Second):
+					a.logger.Warn("Таймаут при установке иконки в трее", "attempt", attempt)
+				}
+
+				// Если это не последняя попытка, ждем перед следующей
+				if attempt < maxAttempts {
+					delay := time.Duration(attempt) * baseDelay
+					a.logger.Debug("Ожидание перед следующей попыткой", "delay", delay)
+					time.Sleep(delay)
+				}
+			}
+
+			a.logger.Error("Не удалось установить иконку в трее после всех попыток", "attempts", maxAttempts)
 		}()
 	}
 }
@@ -494,4 +571,28 @@ func (a *App) ActivateWindow() {
 			a.logger.Warn("Окно не инициализировано")
 		}
 	})
+}
+
+// showProcessError показывает диалог с ошибкой процесса
+func (a *App) showProcessError(strategyName string, errorMsg string) {
+	a.logger.Error("Ошибка процесса winws", "strategy", strategyName, "error", errorMsg)
+
+	// Обновляем статус
+	a.updateStatus()
+
+	// Показываем окно, если оно скрыто
+	if a.window != nil {
+		a.window.Show()
+		a.window.RequestFocus()
+	}
+
+	// Формируем сообщение об ошибке
+	message := fmt.Sprintf("Стратегия '%s' завершилась с ошибкой:\n\n%s", strategyName, errorMsg)
+
+	// Ограничиваем длину сообщения для отображения
+	if len(message) > 1000 {
+		message = message[:1000] + "\n\n... (сообщение обрезано)"
+	}
+
+	dialog.ShowError(fmt.Errorf("%s", message), a.window)
 }

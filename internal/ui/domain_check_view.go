@@ -8,14 +8,14 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/IProxymate/GoZapret/internal/services"
+	"github.com/IProxymate/GoZapret/internal/services/domain_check"
 )
 
 // DomainCheckView представление для проверки доменов
 type DomainCheckView struct {
 	app           fyne.App
 	window        fyne.Window
-	domainChecker *services.DomainChecker
+	domainChecker *domain_check.Checker
 }
 
 // NewDomainCheckView создает новое представление для проверки доменов
@@ -23,7 +23,7 @@ func NewDomainCheckView(app fyne.App, window fyne.Window) *DomainCheckView {
 	return &DomainCheckView{
 		app:           app,
 		window:        window,
-		domainChecker: services.NewDomainChecker(),
+		domainChecker: domain_check.NewCheckerWithDefaults(),
 	}
 }
 

@@ -241,51 +241,65 @@ func (m *Manager) ensureWorkingDir() string {
 	return workingDir
 }
 
-// copyRequiredFiles копирует необходимые файлы в рабочую директорию
+// copyRequiredFiles копирует все файлы из директорий bin и lists в рабочую директорию
 func (m *Manager) copyRequiredFiles(assetsPath domain.AssetsPath, binDir, listsDir string) error {
-	binFiles := []string{
-		"winws.exe", "cygwin1.dll", "WinDivert.dll", "WinDivert64.sys",
-		"quic_initial_www_google_com.bin", "tls_clienthello_4pda_to.bin", "tls_clienthello_www_google_com.bin",
+	// Копируем все файлы из bin
+	srcBinDir := filepath.Join(assetsPath.String(), "bin")
+	if err := m.copyAllFilesFromDir(srcBinDir, binDir); err != nil {
+		slog.Warn("Ошибка копирования файлов из bin", "error", err)
 	}
 
-	for _, fileName := range binFiles {
-		m.copyFile(assetsPath, fileName, binDir, "bin")
-	}
-
-	listFiles := []string{
-		"list-general.txt", "list-exclude.txt", "list-google.txt",
-		"ipset-all.txt", "ipset-exclude.txt",
-	}
-
-	for _, fileName := range listFiles {
-		if err := m.copyFile(assetsPath, fileName, listsDir, "lists"); err != nil {
-			// Создаем пустой файл если не найден
-			emptyPath := filepath.Join(listsDir, fileName)
-			os.WriteFile(emptyPath, []byte(""), 0644)
-		}
+	// Копируем все файлы из lists
+	srcListsDir := filepath.Join(assetsPath.String(), "lists")
+	if err := m.copyAllFilesFromDir(srcListsDir, listsDir); err != nil {
+		slog.Warn("Ошибка копирования файлов из lists", "error", err)
 	}
 
 	return nil
 }
 
-// copyFile копирует файл из исходной директории в целевую
-func (m *Manager) copyFile(assetsPath domain.AssetsPath, fileName, targetDir, subDir string) error {
-	srcPath := filepath.Join(assetsPath.String(), subDir, fileName)
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		srcPath = filepath.Join(assetsPath.String(), fileName)
+// copyAllFilesFromDir копирует все файлы из исходной директории в целевую (с заменой)
+func (m *Manager) copyAllFilesFromDir(srcDir, dstDir string) error {
+	// Проверяем существование исходной директории
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		slog.Debug("Исходная директория не существует", "dir", srcDir)
+		return nil
 	}
 
-	if _, err := os.Stat(srcPath); err != nil {
-		return err
-	}
-
-	data, err := os.ReadFile(srcPath)
+	// Читаем содержимое исходной директории
+	entries, err := os.ReadDir(srcDir)
 	if err != nil {
-		return err
+		return fmt.Errorf("ошибка чтения директории %s: %w", srcDir, err)
 	}
 
-	dstPath := filepath.Join(targetDir, fileName)
-	return os.WriteFile(dstPath, data, 0755)
+	copiedCount := 0
+	for _, entry := range entries {
+		// Пропускаем директории, копируем только файлы
+		if entry.IsDir() {
+			continue
+		}
+
+		srcPath := filepath.Join(srcDir, entry.Name())
+		dstPath := filepath.Join(dstDir, entry.Name())
+
+		// Читаем исходный файл
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			slog.Warn("Ошибка чтения файла", "file", srcPath, "error", err)
+			continue
+		}
+
+		// Записываем в целевую директорию (с заменой существующего)
+		if err := os.WriteFile(dstPath, data, 0755); err != nil {
+			slog.Warn("Ошибка записи файла", "file", dstPath, "error", err)
+			continue
+		}
+
+		copiedCount++
+	}
+
+	slog.Debug("Файлы скопированы", "from", srcDir, "to", dstDir, "count", copiedCount)
+	return nil
 }
 
 // readVersionFromServiceBat читает версию из файла service.bat
