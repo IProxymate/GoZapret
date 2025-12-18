@@ -228,9 +228,9 @@ func (v *MainView) createIpsetSelect() *widget.Select {
 		v.app.configManager.SetIpsetMode(mode)
 
 		// Обновляем файл ipset при изменении режима
-		assetsPath := v.app.configManager.GetAssetsPath()
-		if assetsPath != "" {
-			v.app.ipsetService.UpdateIpsetFile(assetsPath, mode)
+		workingDir := v.app.configManager.GetWorkingDir()
+		if workingDir != "" {
+			v.app.ipsetService.UpdateIpsetFile(workingDir, mode)
 		}
 
 		// Перезапускаем стратегию только если процесс уже запущен
@@ -249,6 +249,7 @@ func (v *MainView) createIpsetSelect() *widget.Select {
 			return
 		}
 
+		assetsPath := v.app.configManager.GetAssetsPath()
 		if assetsPath == "" {
 			return
 		}

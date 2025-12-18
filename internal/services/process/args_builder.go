@@ -148,37 +148,43 @@ func (b *ArgsBuilder) addCustomHostlistArgs(args []string) []string {
 	// Создаем новый массив аргументов
 	newArgs := make([]string, 0, len(args)+20)
 
-	// Флаг: добавили ли мы уже наши аргументы в текущий профиль
-	addedInCurrentProfile := false
+	// Флаги для текущего профиля
+	addedExtraInProfile := false
+	addedExcludeInProfile := false
 
-	for i, arg := range args {
+	for _, arg := range args {
 		newArgs = append(newArgs, arg)
 
-		// Если встретили --new, сбрасываем флаг для нового профиля
+		// Если встретили --new, сбрасываем флаги для нового профиля
 		if arg == "--new" {
-			addedInCurrentProfile = false
+			addedExtraInProfile = false
+			addedExcludeInProfile = false
 			continue
 		}
 
-		// Проверяем, является ли это первым --hostlist= в профиле
-		if !addedInCurrentProfile &&
-			strings.HasPrefix(arg, "--hostlist=") &&
-			!strings.HasPrefix(arg, "--hostlist-exclude=") &&
-			!strings.HasPrefix(arg, "--hostlist-domains=") {
-
+		// После первого --hostlist= в профиле добавляем наши списки
+		if !addedExtraInProfile && strings.HasPrefix(arg, "--hostlist=") {
 			// Добавляем наш --hostlist для включенных доменов
 			if extraExists {
 				newArgs = append(newArgs, "--hostlist="+extraListPath)
-				slog.Debug("Добавлен --hostlist в профиль", "path", extraListPath, "position", i)
+				slog.Debug("Добавлен --hostlist в профиль", "path", extraListPath)
 			}
-
 			// Добавляем --hostlist-exclude для исключенных доменов
 			if excludeExists {
 				newArgs = append(newArgs, "--hostlist-exclude="+excludeListPath)
-				slog.Debug("Добавлен --hostlist-exclude в профиль", "path", excludeListPath, "position", i)
+				slog.Debug("Добавлен --hostlist-exclude в профиль", "path", excludeListPath)
+				addedExcludeInProfile = true
 			}
+			addedExtraInProfile = true
+		}
 
-			addedInCurrentProfile = true
+		// Если встретили оригинальный --hostlist-exclude=, добавляем наш после него
+		if !addedExcludeInProfile && strings.HasPrefix(arg, "--hostlist-exclude=") {
+			if excludeExists {
+				newArgs = append(newArgs, "--hostlist-exclude="+excludeListPath)
+				slog.Debug("Добавлен --hostlist-exclude после оригинального", "path", excludeListPath)
+			}
+			addedExcludeInProfile = true
 		}
 	}
 

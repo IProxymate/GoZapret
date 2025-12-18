@@ -64,6 +64,9 @@ type App struct {
 	// Флаг автозапуска
 	autostart bool
 
+	// Флаг полного запуска приложения (для корректной обработки Lifecycle)
+	appStarted bool
+
 	// UI компоненты
 	mainView *MainView
 }
@@ -224,6 +227,11 @@ func (a *App) Run() {
 		a.logger.Warn("Не удалось запустить IPC сервер", "error", err)
 	}
 
+	// Устанавливаем обработчик завершения приложения
+	a.fyneApp.Lifecycle().SetOnStopped(func() {
+		a.onAppStopped()
+	})
+
 	// Проверяем аргументы командной строки
 	autostart := slices.Contains(os.Args[1:], "/autostart")
 
@@ -259,11 +267,15 @@ func (a *App) Run() {
 		a.handleAutostart()
 		// Обновляем статус
 		a.updateStatus()
+		// Помечаем приложение как запущенное
+		a.appStarted = true
 		// Запускаем приложение в фоновом режиме (в трее)
 		a.fyneApp.Run()
 	} else {
 		// Обновляем статус
 		a.updateStatus()
+		// Помечаем приложение как запущенное
+		a.appStarted = true
 		// Обычный режим - показываем окно
 		a.window.Resize(fyne.NewSize(800, 600))
 		a.window.CenterOnScreen()
@@ -469,7 +481,7 @@ func (a *App) GetWindow() fyne.Window {
 func (a *App) setupTray(icon []byte) {
 	// Проверяем, является ли приложение desktop-приложением
 	if deskApp, ok := a.fyneApp.(desktop.App); ok {
-		// Создаем меню для трея
+		// Создаем меню для трея (без пункта "Выход", т.к. Fyne добавляет его автоматически)
 		menu := fyne.NewMenu("GoZapret",
 			fyne.NewMenuItem("Показать", func() {
 				a.window.Show()
@@ -595,4 +607,32 @@ func (a *App) showProcessError(strategyName string, errorMsg string) {
 	}
 
 	dialog.ShowError(fmt.Errorf("%s", message), a.window)
+}
+
+// Shutdown завершает приложение и останавливает все процессы
+func (a *App) Shutdown() {
+	a.logger.Info("Завершение приложения")
+	a.stopWinwsProcess()
+	a.fyneApp.Quit()
+}
+
+// onAppStopped вызывается при завершении приложения (через Lifecycle)
+func (a *App) onAppStopped() {
+	// Игнорируем вызов, если приложение ещё не было полностью запущено
+	if !a.appStarted {
+		a.logger.Debug("Игнорируем OnStopped - приложение ещё не запущено")
+		return
+	}
+	a.logger.Debug("Приложение завершается (Lifecycle.OnStopped)")
+	a.stopWinwsProcess()
+}
+
+// stopWinwsProcess останавливает процесс winws, если он запущен
+func (a *App) stopWinwsProcess() {
+	if a.processManager.IsRunning() || a.processManager.IsWinwsProcessRunning() {
+		a.logger.Debug("Остановка процесса winws")
+		if err := a.processManager.StopProcess(); err != nil {
+			a.logger.Warn("Ошибка остановки процесса", "error", err)
+		}
+	}
 }

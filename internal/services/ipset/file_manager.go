@@ -5,8 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-
-	"github.com/IProxymate/GoZapret/internal/domain"
 )
 
 // FileManager управляет файлами ipset
@@ -18,14 +16,14 @@ func NewFileManager() *FileManager {
 }
 
 // UpdateMode обновляет содержимое файла ipset-all.txt в зависимости от режима
-func (f *FileManager) UpdateMode(assetsPath domain.AssetsPath, mode string) error {
+func (f *FileManager) UpdateMode(workingDir string, mode string) error {
 	// Проверяем корректность режима
 	if mode != "any" && mode != "none" && mode != "loaded" {
 		return fmt.Errorf("некорректный режим ipset: %s", mode)
 	}
 
-	// Формируем путь к файлу ipset-all.txt
-	ipsetFilePath := filepath.Join(assetsPath.String(), "lists", "ipset-all.txt")
+	// Формируем путь к файлу ipset-all.txt в рабочей директории
+	ipsetFilePath := filepath.Join(workingDir, "lists", "ipset-all.txt")
 
 	// Создаем директорию, если она не существует
 	listsDir := filepath.Dir(ipsetFilePath)
@@ -40,7 +38,7 @@ func (f *FileManager) UpdateMode(assetsPath domain.AssetsPath, mode string) erro
 	case "none":
 		return f.writeNoneMode(ipsetFilePath)
 	case "loaded":
-		return f.writeLoadedMode(assetsPath, ipsetFilePath)
+		return f.writeLoadedMode(workingDir, ipsetFilePath)
 	}
 
 	return nil
@@ -66,7 +64,7 @@ func (f *FileManager) writeNoneMode(ipsetFilePath string) error {
 }
 
 // writeLoadedMode восстанавливает файл из бэкапа или создает стандартный список
-func (f *FileManager) writeLoadedMode(assetsPath domain.AssetsPath, ipsetFilePath string) error {
+func (f *FileManager) writeLoadedMode(workingDir string, ipsetFilePath string) error {
 	ipsetBackupPath := ipsetFilePath + ".backup"
 
 	// Проверяем, существует ли бэкап
@@ -94,8 +92,8 @@ func (f *FileManager) writeLoadedMode(assetsPath domain.AssetsPath, ipsetFilePat
 }
 
 // GetCurrentMode определяет текущий режим ipset по содержимому файла
-func (f *FileManager) GetCurrentMode(assetsPath domain.AssetsPath) (string, error) {
-	ipsetFilePath := filepath.Join(assetsPath.String(), "lists", "ipset-all.txt")
+func (f *FileManager) GetCurrentMode(workingDir string) (string, error) {
+	ipsetFilePath := filepath.Join(workingDir, "lists", "ipset-all.txt")
 
 	// Проверяем, существует ли файл
 	fileInfo, err := os.Stat(ipsetFilePath)

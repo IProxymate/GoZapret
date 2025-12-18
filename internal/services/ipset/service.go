@@ -19,13 +19,13 @@ func NewService() *Service {
 }
 
 // UpdateIpsetFile обновляет содержимое файла ipset-all.txt в зависимости от режима
-func (s *Service) UpdateIpsetFile(assetsPath domain.AssetsPath, mode string) error {
-	return s.fileManager.UpdateMode(assetsPath, mode)
+func (s *Service) UpdateIpsetFile(workingDir string, mode string) error {
+	return s.fileManager.UpdateMode(workingDir, mode)
 }
 
 // GetCurrentIpsetMode определяет текущий режим ipset по содержимому файла
-func (s *Service) GetCurrentIpsetMode(assetsPath domain.AssetsPath) (string, error) {
-	return s.fileManager.GetCurrentMode(assetsPath)
+func (s *Service) GetCurrentIpsetMode(workingDir string) (string, error) {
+	return s.fileManager.GetCurrentMode(workingDir)
 }
 
 // BackupIpsetFile создает бэкап файла ipset-all.txt

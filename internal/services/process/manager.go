@@ -219,12 +219,34 @@ func (m *Manager) GetCurrentProcess() *domain.ProcessInfo {
 
 // RestartStrategy перезапускает стратегию
 func (m *Manager) RestartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterEnabled bool) error {
-	if m.IsRunning() {
-		if err := m.StopProcess(); err != nil {
+	// Останавливаем процесс, если он запущен (проверяем и внутреннее состояние, и системный процесс)
+	if m.IsRunning() || m.monitor.IsWinwsRunning() {
+		if err := m.StopProcess(); err != nil && err != domain.ErrProcessNotRunning {
 			return fmt.Errorf("ошибка остановки текущего процесса: %w", err)
 		}
-		time.Sleep(500 * time.Millisecond)
+
+		// Ждём фактического завершения процесса в системе
+		maxWaitTime := 5 * time.Second
+		checkInterval := 100 * time.Millisecond
+		waited := time.Duration(0)
+
+		for m.monitor.IsWinwsRunning() && waited < maxWaitTime {
+			time.Sleep(checkInterval)
+			waited += checkInterval
+		}
+
+		// Если процесс всё ещё запущен после ожидания, принудительно убиваем
+		if m.monitor.IsWinwsRunning() {
+			slog.Warn("Процесс не завершился за отведённое время, принудительное завершение")
+			if err := m.executor.KillAllWinws(); err != nil {
+				return fmt.Errorf("ошибка принудительного завершения процесса: %w", err)
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
+
+	// Сбрасываем внутреннее состояние
+	m.currentProcess = nil
 
 	if err := m.StartStrategy(strategy, assetsPath, gameFilterEnabled); err != nil {
 		return fmt.Errorf("ошибка запуска стратегии: %w", err)
