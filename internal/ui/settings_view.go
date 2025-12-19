@@ -86,15 +86,12 @@ func (v *SettingsView) buildContent() fyne.CanvasObject {
 			return
 		}
 
-		// Подготавливаем рабочую директорию с новыми файлами
+		// Перезагружаем стратегии и обновляем рабочую директорию
 		if newPath != "" {
-			if err := v.app.configManager.PrepareWorkingDirectory(); err != nil {
-				dialog.ShowError(fmt.Errorf("ошибка подготовки рабочей директории: %v", err), v.window)
+			if err := v.app.ReloadStrategies(); err != nil {
+				dialog.ShowError(err, v.window)
 				return
 			}
-
-			// Перезагружаем стратегии
-			v.app.loadStrategies(newPath)
 		}
 
 		dialog.ShowInformation("Успех", "Настройки сохранены", v.window)

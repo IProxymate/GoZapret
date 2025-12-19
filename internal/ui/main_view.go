@@ -80,6 +80,8 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 	listsMenu := fyne.NewMenu("Списки",
 		fyne.NewMenuItem("Включенные домены", v.showIncludedDomains),
 		fyne.NewMenuItem("Исключенные домены", v.showExcludedDomains),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Пользовательские подсети (IPset)", v.showCustomIpset),
 	)
 
 	// Меню "Помощь"
@@ -87,6 +89,8 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 		fyne.NewMenuItem("Проверить домен", v.showDomainCheck),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Проверить обновления", v.helpView.CheckForUpdates),
+		fyne.NewMenuItem("Обновить список IPset", v.helpView.UpdateIpsetList),
+		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("О программе", v.helpView.ShowAbout),
 	)
 
@@ -325,8 +329,9 @@ func (v *MainView) createControlButtons() fyne.CanvasObject {
 func (v *MainView) buildAdditionalCard() *widget.Card {
 	diagButton := widget.NewButton("Диагностика", v.runDiagnostics)
 	clearCacheButton := widget.NewButton("Очистить кэш Discord", v.clearCache)
+	reloadStrategiesButton := widget.NewButton("Перечитать список стратегий", v.reloadStrategies)
 
-	content := container.NewGridWithColumns(2, diagButton, clearCacheButton)
+	content := container.NewGridWithColumns(3, diagButton, clearCacheButton, reloadStrategiesButton)
 	return widget.NewCard("Дополнительно", "", content)
 }
 
@@ -545,8 +550,45 @@ func (v *MainView) showExcludedDomains() {
 	domainListView.Show()
 }
 
+// showCustomIpset показывает окно редактирования пользовательских подсетей
+func (v *MainView) showCustomIpset() {
+	filePath := v.app.configManager.GetCustomIpsetPath()
+	ipsetListView := NewIpsetListView(v.app, filePath, "Пользовательские подсети (IPset)")
+	ipsetListView.Show()
+}
+
 // showDomainCheck показывает окно проверки домена
 func (v *MainView) showDomainCheck() {
 	domainCheckView := NewDomainCheckView(v.app.fyneApp, v.app.window)
 	domainCheckView.Show()
+}
+
+// reloadStrategies перечитывает список стратегий и обновляет файлы в рабочей директории
+func (v *MainView) reloadStrategies() {
+	// Создаем прогресс бар
+	progressBar := widget.NewProgressBarInfinite()
+	progressBar.Resize(fyne.NewSize(300, 30))
+
+	// Создаем диалог с прогресс баром
+	dialogContent := container.NewVBox(
+		widget.NewLabel("Обновление стратегий..."),
+		progressBar,
+	)
+
+	progressDialog := dialog.NewCustomWithoutButtons("Обновление", dialogContent, v.app.window)
+	progressDialog.Show()
+
+	// Запускаем обновление в горутине
+	go func() {
+		err := v.app.ReloadStrategies()
+
+		fyne.Do(func() {
+			progressDialog.Hide()
+			if err != nil {
+				dialog.ShowError(err, v.app.window)
+				return
+			}
+			dialog.ShowInformation("Успех", "Стратегии успешно обновлены", v.app.window)
+		})
+	}()
 }

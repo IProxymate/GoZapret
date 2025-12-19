@@ -422,6 +422,23 @@ func (a *App) updateStatus() {
 	})
 }
 
+// ReloadStrategies перечитывает стратегии и обновляет файлы в рабочей директории
+func (a *App) ReloadStrategies() error {
+	assetsPath := a.configManager.GetAssetsPath()
+	if assetsPath == "" {
+		return fmt.Errorf("путь к ресурсам не установлен")
+	}
+
+	// Подготавливаем рабочую директорию (перезаписывает файлы)
+	if err := a.configManager.PrepareWorkingDirectory(); err != nil {
+		return fmt.Errorf("ошибка подготовки рабочей директории: %w", err)
+	}
+
+	// Перезагружаем стратегии
+	a.loadStrategies(assetsPath)
+	return nil
+}
+
 // loadStrategies загружает стратегии из указанного пути
 func (a *App) loadStrategies(assetsPath domain.AssetsPath) {
 	if err := a.strategyService.LoadFromPath(assetsPath); err != nil {

@@ -241,6 +241,14 @@ func (v *HelpView) performUpdate(versionInfo *updates.VersionInfo, state *update
 		return
 	}
 
+	// Обновляем список ipset
+	v.updateStatus(statusLabel, "Обновление списка IPset...")
+	workingDir := v.app.configManager.GetWorkingDir()
+	if _, err := v.app.updateService.UpdateIpsetList(newAssetsPath.String(), workingDir); err != nil {
+		// Не прерываем обновление из-за ошибки ipset, просто логируем
+		v.app.logger.Warn("Не удалось обновить список ipset", "error", err)
+	}
+
 	// Перезагружаем стратегии
 	v.updateStatus(statusLabel, "Загрузка стратегий...")
 	fyne.Do(func() {
@@ -390,4 +398,80 @@ func (v *HelpView) createProgressDialog(title, message string) dialog.Dialog {
 	)
 
 	return dialog.NewCustomWithoutButtons(title, dialogContent, v.app.window)
+}
+
+// UpdateIpsetList обновляет список ipset из удалённого источника
+func (v *HelpView) UpdateIpsetList() {
+	progressDialog := v.createProgressDialog("Обновление IPset", "Загрузка списка IPset...")
+	progressDialog.Show()
+
+	go func() {
+		assetsPath := v.app.configManager.GetAssetsPath()
+		workingDir := v.app.configManager.GetWorkingDir()
+
+		result, err := v.app.updateService.UpdateIpsetList(assetsPath.String(), workingDir)
+
+		fyne.Do(func() {
+			progressDialog.Hide()
+
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("ошибка обновления списка IPset:\n%w", err), v.app.window)
+				return
+			}
+
+			// Обновляем ipset файл с учётом текущего режима и пользовательских подсетей
+			if workingDir != "" {
+				mode, _ := v.app.ipsetMode.Get()
+				if mode == "" {
+					mode = "loaded"
+				}
+				v.app.ipsetService.UpdateIpsetFile(workingDir, mode)
+			}
+
+			// Перезапускаем стратегию если запущена
+			v.restartStrategyIfRunning()
+
+			var filesInfo string
+			if len(result.UpdatedFiles) > 0 {
+				filesInfo = fmt.Sprintf("\n\nОбновлено файлов: %d", len(result.UpdatedFiles))
+			}
+
+			dialog.ShowInformation("Обновление IPset",
+				fmt.Sprintf("Список IPset успешно обновлён!%s", filesInfo),
+				v.app.window)
+		})
+	}()
+}
+
+// restartStrategyIfRunning перезапускает стратегию если она запущена
+func (v *HelpView) restartStrategyIfRunning() {
+	if !v.app.processManager.IsRunning() && !v.app.processManager.IsWinwsProcessRunning() {
+		return
+	}
+
+	strategyName, _ := v.app.selectedStrategy.Get()
+	if strategyName == "" {
+		return
+	}
+
+	strategy, err := v.app.strategyService.GetByName(domain.StrategyName(strategyName))
+	if err != nil {
+		v.app.logger.Error("Ошибка получения стратегии для перезапуска", "error", err)
+		return
+	}
+
+	assetsPath := v.app.configManager.GetAssetsPath()
+	if assetsPath == "" {
+		return
+	}
+
+	gameFilter, _ := v.app.gameFilter.Get()
+
+	go func() {
+		v.app.logger.Info("Перезапуск стратегии после обновления IPset", "strategy", strategyName)
+		if err := v.app.processManager.RestartStrategy(strategy, assetsPath, gameFilter); err != nil {
+			v.app.logger.Error("Ошибка перезапуска стратегии", "error", err)
+		}
+		v.app.updateStatus()
+	}()
 }

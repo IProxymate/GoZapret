@@ -127,6 +127,15 @@ func (m *Manager) ensureHostsDirectory() error {
 		slog.Debug("Создан файл list-extra-exclude.txt", "path", excludeListPath)
 	}
 
+	// Создаем файл ipset-custom.txt, если он не существует
+	customIpsetPath := filepath.Join(hostsDir, "ipset-custom.txt")
+	if _, err := os.Stat(customIpsetPath); os.IsNotExist(err) {
+		if err := os.WriteFile(customIpsetPath, []byte(""), 0644); err != nil {
+			return fmt.Errorf("ошибка создания файла ipset-custom.txt: %v", err)
+		}
+		slog.Debug("Создан файл ipset-custom.txt", "path", customIpsetPath)
+	}
+
 	return nil
 }
 
@@ -144,6 +153,11 @@ func (m *Manager) GetExtraListPath() string {
 // GetExcludeListPath возвращает путь к файлу list-extra-exclude.txt
 func (m *Manager) GetExcludeListPath() string {
 	return filepath.Join(m.GetHostsDir(), "list-extra-exclude.txt")
+}
+
+// GetCustomIpsetPath возвращает путь к файлу пользовательских подсетей ipset-custom.txt
+func (m *Manager) GetCustomIpsetPath() string {
+	return filepath.Join(m.GetHostsDir(), "ipset-custom.txt")
 }
 
 // GetConfig возвращает текущую конфигурацию
