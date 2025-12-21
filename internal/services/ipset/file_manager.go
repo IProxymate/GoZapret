@@ -36,9 +36,9 @@ func (f *FileManager) UpdateMode(workingDir string, mode string) error {
 	// В зависимости от режима, записываем соответствующее содержимое
 	switch mode {
 	case "any":
-		return f.writeAnyMode(ipsetFilePath, workingDir)
+		return f.writeAnyMode(ipsetFilePath)
 	case "none":
-		return f.writeNoneMode(ipsetFilePath, workingDir)
+		return f.writeNoneMode(ipsetFilePath)
 	case "loaded":
 		return f.writeLoadedMode(workingDir, ipsetFilePath)
 	}
@@ -46,43 +46,22 @@ func (f *FileManager) UpdateMode(workingDir string, mode string) error {
 	return nil
 }
 
-// writeAnyMode создает пустой файл для режима "any" (или с пользовательскими подсетями)
-func (f *FileManager) writeAnyMode(ipsetFilePath string, workingDir string) error {
-	// Проверяем, есть ли пользовательские подсети
-	customSubnets := f.loadCustomSubnets(workingDir)
-
-	var content string
-	if len(customSubnets) > 0 {
-		content = strings.Join(customSubnets, "\n") + "\n"
-		log.Printf("Режим ipset 'any': добавлено %d пользовательских подсетей", len(customSubnets))
-	} else {
-		content = ""
-		log.Printf("Режим ipset 'any': создан пустой файл %s", ipsetFilePath)
+// writeAnyMode создает пустой файл для режима "any"
+func (f *FileManager) writeAnyMode(ipsetFilePath string) error {
+	if err := os.WriteFile(ipsetFilePath, []byte(""), 0644); err != nil {
+		return fmt.Errorf("ошибка создания пустого файла ipset-all.txt: %w", err)
 	}
-
-	if err := os.WriteFile(ipsetFilePath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("ошибка создания файла ipset-all.txt: %w", err)
-	}
+	log.Printf("Режим ipset 'any': создан пустой файл %s", ipsetFilePath)
 	return nil
 }
 
 // writeNoneMode записывает специальный IP для режима "none"
-func (f *FileManager) writeNoneMode(ipsetFilePath string, workingDir string) error {
-	// Проверяем, есть ли пользовательские подсети
-	customSubnets := f.loadCustomSubnets(workingDir)
-
-	var content string
-	if len(customSubnets) > 0 {
-		content = strings.Join(customSubnets, "\n") + "\n"
-		log.Printf("Режим ipset 'none': добавлено %d пользовательских подсетей", len(customSubnets))
-	} else {
-		content = "203.0.113.113/32\n"
-		log.Printf("Режим ipset 'none': файл %s содержит только 203.0.113.113/32", ipsetFilePath)
-	}
-
+func (f *FileManager) writeNoneMode(ipsetFilePath string) error {
+	content := "203.0.113.113/32\n"
 	if err := os.WriteFile(ipsetFilePath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("ошибка записи файла ipset-all.txt для режима none: %w", err)
 	}
+	log.Printf("Режим ipset 'none': файл %s содержит только 203.0.113.113/32", ipsetFilePath)
 	return nil
 }
 

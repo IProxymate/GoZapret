@@ -223,37 +223,27 @@ func (s *Service) UpdateIpsetList(assetsPath string, workingDir string) (*IpsetU
 		UpdatedFiles: []string{},
 	}
 
-	// Обновляем файл в директории с ресурсами (assets)
+	// Обновляем бэкап в директории с ресурсами (assets)
+	// Основной файл ipset-all.txt будет сформирован через UpdateIpsetFile с учётом режима и пользовательских подсетей
 	if assetsPath != "" {
-		assetsIpsetPath := filepath.Join(assetsPath, "lists", "ipset-all.txt")
-		if err := s.writeIpsetFile(assetsIpsetPath, content); err != nil {
-			slog.Warn("Ошибка записи ipset в директорию ресурсов", "path", assetsIpsetPath, "error", err)
-		} else {
-			result.UpdatedFiles = append(result.UpdatedFiles, assetsIpsetPath)
-			slog.Debug("Ipset обновлён в директории ресурсов", "path", assetsIpsetPath)
-		}
-
-		// Также обновляем бэкап
-		assetsBackupPath := assetsIpsetPath + ".backup"
+		assetsBackupPath := filepath.Join(assetsPath, "lists", "ipset-all.txt.backup")
 		if err := s.writeIpsetFile(assetsBackupPath, content); err != nil {
 			slog.Warn("Ошибка записи бэкапа ipset в директорию ресурсов", "path", assetsBackupPath, "error", err)
+		} else {
+			result.UpdatedFiles = append(result.UpdatedFiles, assetsBackupPath)
+			slog.Debug("Бэкап ipset обновлён в директории ресурсов", "path", assetsBackupPath)
 		}
 	}
 
-	// Обновляем файл в рабочей директории
+	// Обновляем бэкап в рабочей директории
+	// Основной файл ipset-all.txt будет сформирован через UpdateIpsetFile с учётом режима и пользовательских подсетей
 	if workingDir != "" {
-		workingIpsetPath := filepath.Join(workingDir, "lists", "ipset-all.txt")
-		if err := s.writeIpsetFile(workingIpsetPath, content); err != nil {
-			slog.Warn("Ошибка записи ipset в рабочую директорию", "path", workingIpsetPath, "error", err)
-		} else {
-			result.UpdatedFiles = append(result.UpdatedFiles, workingIpsetPath)
-			slog.Debug("Ipset обновлён в рабочей директории", "path", workingIpsetPath)
-		}
-
-		// Также обновляем бэкап в рабочей директории
-		workingBackupPath := workingIpsetPath + ".backup"
+		workingBackupPath := filepath.Join(workingDir, "lists", "ipset-all.txt.backup")
 		if err := s.writeIpsetFile(workingBackupPath, content); err != nil {
 			slog.Warn("Ошибка записи бэкапа ipset в рабочую директорию", "path", workingBackupPath, "error", err)
+		} else {
+			result.UpdatedFiles = append(result.UpdatedFiles, workingBackupPath)
+			slog.Debug("Бэкап ipset обновлён в рабочей директории", "path", workingBackupPath)
 		}
 	}
 

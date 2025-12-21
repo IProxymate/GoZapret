@@ -19,6 +19,9 @@ type MainView struct {
 
 	// Флаг завершения инициализации UI
 	uiInitialized bool
+
+	// Виджет выбора стратегии для обновления извне
+	strategySelect *widget.Select
 }
 
 // NewMainView создает новый главный вид
@@ -133,32 +136,89 @@ func (v *MainView) createStrategySelect() *widget.Select {
 		items = []string{}
 	}
 
-	strategySelect := widget.NewSelect(items, func(s string) {
+	v.strategySelect = widget.NewSelect(items, func(s string) {
+		// Игнорируем изменения до завершения инициализации UI
+		if !v.uiInitialized {
+			return
+		}
+
 		v.app.selectedStrategy.Set(s)
 		v.app.configManager.SetLastStrategyName(domain.StrategyName(s))
-	})
 
-	// Привязываем список стратегий к виджету
-	v.app.strategies.AddListener(binding.NewDataListener(func() {
-		items, _ := v.app.strategies.Get()
-		strategySelect.Options = items
-		strategySelect.Refresh()
-	}))
+		// Перезапускаем стратегию только если процесс уже запущен
+		if !v.app.processManager.IsRunning() && !v.app.processManager.IsWinwsProcessRunning() {
+			return
+		}
+
+		// Получаем новую стратегию
+		strategy, err := v.app.strategyService.GetByName(domain.StrategyName(s))
+		if err != nil {
+			return
+		}
+
+		assetsPath := v.app.configManager.GetAssetsPath()
+		if assetsPath == "" {
+			return
+		}
+
+		// Получаем текущее состояние GameFilter
+		gameFilter, _ := v.app.gameFilter.Get()
+
+		// Перезапускаем стратегию в фоне
+		go func() {
+			err := v.app.processManager.RestartStrategy(strategy, assetsPath, gameFilter)
+			if err != nil {
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf("ошибка перезапуска стратегии: %v", err), v.app.window)
+				})
+			}
+			// Обновляем статус после перезапуска
+			v.app.updateStatus()
+		}()
+	})
 
 	// Привязываем выбранную стратегию
 	v.app.selectedStrategy.AddListener(binding.NewDataListener(func() {
 		selected, _ := v.app.selectedStrategy.Get()
-		strategySelect.SetSelected(selected)
+		if v.strategySelect != nil {
+			v.strategySelect.SetSelected(selected)
+		}
 	}))
 
 	// Устанавливаем начальные значения
-	items, _ = v.app.strategies.Get()
-	strategySelect.Options = items
 	selected, _ := v.app.selectedStrategy.Get()
 	if selected != "" {
-		strategySelect.SetSelected(selected)
+		v.strategySelect.SetSelected(selected)
 	}
-	return strategySelect
+	return v.strategySelect
+}
+
+// UpdateStrategyOptions обновляет список стратегий в виджете (вызывается из App)
+func (v *MainView) UpdateStrategyOptions(items []string, selectedStrategy string) {
+	if v.strategySelect == nil {
+		return
+	}
+
+	v.app.logger.Debug("UpdateStrategyOptions: обновление виджета", "count", len(items), "selected", selectedStrategy)
+
+	v.strategySelect.Options = items
+
+	// Проверяем, существует ли выбранная стратегия в новом списке
+	found := false
+	for _, item := range items {
+		if item == selectedStrategy {
+			found = true
+			break
+		}
+	}
+
+	if found && selectedStrategy != "" {
+		v.strategySelect.SetSelected(selectedStrategy)
+	} else if len(items) > 0 {
+		v.strategySelect.SetSelected(items[0])
+	}
+
+	v.strategySelect.Refresh()
 }
 
 // createGameFilterCheck создает чекбокс для Game Filter

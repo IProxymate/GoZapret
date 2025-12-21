@@ -419,12 +419,12 @@ func (v *HelpView) UpdateIpsetList() {
 				return
 			}
 
-			// Обновляем ipset файл с учётом текущего режима и пользовательских подсетей
+			// Формируем итоговый ipset-all.txt с учётом текущего режима и пользовательских подсетей
+			mode, _ := v.app.ipsetMode.Get()
+			if mode == "" {
+				mode = "loaded"
+			}
 			if workingDir != "" {
-				mode, _ := v.app.ipsetMode.Get()
-				if mode == "" {
-					mode = "loaded"
-				}
 				v.app.ipsetService.UpdateIpsetFile(workingDir, mode)
 			}
 
