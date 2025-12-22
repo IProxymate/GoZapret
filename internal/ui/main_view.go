@@ -87,17 +87,21 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 		fyne.NewMenuItem("Пользовательские подсети (IPset)", v.showCustomIpset),
 	)
 
+	// Меню "Инструменты"
+	toolsMenu := fyne.NewMenu("Инструменты",
+		fyne.NewMenuItem("Проверить домен", v.showDomainCheck),
+		fyne.NewMenuItem("Мониторинг приложения", v.showAppMonitor),
+	)
+
 	// Меню "Помощь"
 	helpMenu := fyne.NewMenu("Помощь",
-		fyne.NewMenuItem("Проверить домен", v.showDomainCheck),
-		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("Проверить обновления", v.helpView.CheckForUpdates),
 		fyne.NewMenuItem("Обновить список IPset", v.helpView.UpdateIpsetList),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("О программе", v.helpView.ShowAbout),
 	)
 
-	return fyne.NewMainMenu(fileMenu, listsMenu, helpMenu)
+	return fyne.NewMainMenu(fileMenu, listsMenu, toolsMenu, helpMenu)
 }
 
 // buildControlCard создает карточку управления
@@ -621,6 +625,12 @@ func (v *MainView) showCustomIpset() {
 func (v *MainView) showDomainCheck() {
 	domainCheckView := NewDomainCheckView(v.app.fyneApp, v.app.window)
 	domainCheckView.Show()
+}
+
+// showAppMonitor показывает окно мониторинга приложения
+func (v *MainView) showAppMonitor() {
+	appMonitorView := NewAppMonitorView(v.app)
+	appMonitorView.Show()
 }
 
 // reloadStrategies перечитывает список стратегий и обновляет файлы в рабочей директории
