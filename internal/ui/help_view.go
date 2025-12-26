@@ -147,9 +147,9 @@ func parseURL(urlStr string) *url.URL {
 	return u
 }
 
-// CheckForUpdates проверяет наличие обновлений
+// CheckForUpdates проверяет наличие обновлений ресурсов zapret
 func (v *HelpView) CheckForUpdates() {
-	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка обновлений...")
+	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка обновлений ресурсов zapret...")
 	progressDialog.Show()
 
 	go func() {
@@ -160,6 +160,102 @@ func (v *HelpView) CheckForUpdates() {
 			v.handleVersionCheckResult(versionInfo, err)
 		})
 	}()
+}
+
+// CheckForAppUpdates проверяет наличие обновлений самого приложения GoZapret
+func (v *HelpView) CheckForAppUpdates() {
+	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка обновлений GoZapret...")
+	progressDialog.Show()
+
+	v.app.Services.SelfUpdate.CheckForUpdatesManual(
+		// onUpdateAvailable
+		func(newVersion string) {
+			progressDialog.Hide()
+			v.showAppUpdateDialog(newVersion)
+		},
+		// onNoUpdate
+		func() {
+			progressDialog.Hide()
+			currentVersion := v.app.Services.SelfUpdate.GetCurrentVersion()
+			dialog.ShowInformation("Обновления",
+				fmt.Sprintf("У вас установлена последняя версия GoZapret: %s", currentVersion),
+				v.app.Window)
+		},
+		// onError
+		func(err error) {
+			progressDialog.Hide()
+			dialog.ShowError(fmt.Errorf("ошибка проверки обновлений:\n%w", err), v.app.Window)
+		},
+	)
+}
+
+// showAppUpdateDialog показывает диалог с предложением обновить приложение
+func (v *HelpView) showAppUpdateDialog(newVersion string) {
+	currentVersion := v.app.Services.SelfUpdate.GetCurrentVersion()
+
+	message := fmt.Sprintf(`Доступна новая версия GoZapret!
+
+Текущая версия: %s
+Новая версия: %s
+
+Хотите обновить приложение сейчас?
+После обновления приложение будет перезапущено.`, currentVersion, newVersion)
+
+	dialog.ShowConfirm("Доступно обновление", message,
+		func(confirmed bool) {
+			if confirmed {
+				v.performAppUpdate(newVersion)
+			}
+		},
+		v.app.Window)
+}
+
+// performAppUpdate выполняет обновление приложения
+func (v *HelpView) performAppUpdate(newVersion string) {
+	// Останавливаем winws перед обновлением
+	if v.app.Services.Process.IsRunning() {
+		v.app.Logger.Info("Остановка winws перед обновлением приложения")
+		_ = v.app.Services.StrategyController.StopStrategy()
+	}
+
+	// Создаём диалог с прогрессом
+	progressBar := widget.NewProgressBarInfinite()
+	statusLabel := widget.NewLabel("Подготовка к обновлению...")
+
+	dialogContent := container.NewVBox(
+		statusLabel,
+		progressBar,
+	)
+
+	progressDialog := dialog.NewCustomWithoutButtons("Обновление GoZapret", dialogContent, v.app.Window)
+	progressDialog.Show()
+
+	// Запускаем обновление асинхронно
+	v.app.Services.SelfUpdate.PerformUpdateAsync(
+		newVersion,
+		// onProgress
+		func(status string) {
+			statusLabel.SetText(status)
+		},
+		// onSuccess
+		func() {
+			progressDialog.Hide()
+			// Показываем диалог и закрываем приложение для замены exe
+			dialog.ShowInformation("Обновление завершено",
+				"Обновление загружено!\n\nПриложение будет перезапущено.",
+				v.app.Window)
+			// Даём время показать диалог и закрываем
+			go func() {
+				time.Sleep(2 * time.Second)
+				v.app.FyneApp.Quit()
+			}()
+		},
+		// onError
+		func(err error) {
+			progressDialog.Hide()
+			dialog.ShowError(fmt.Errorf("ошибка обновления:\n%w", err), v.app.Window)
+		},
+	)
 }
 
 // checkVersion проверяет версию на GitHub

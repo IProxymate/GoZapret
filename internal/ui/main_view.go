@@ -105,7 +105,8 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 
 	// Меню "Помощь"
 	helpMenu := fyne.NewMenu("Помощь",
-		fyne.NewMenuItem("Проверить обновления", v.helpView.CheckForUpdates),
+		fyne.NewMenuItem("Обновить приложение", v.helpView.CheckForAppUpdates),
+		fyne.NewMenuItem("Обновить ресурсы zapret", v.helpView.CheckForUpdates),
 		fyne.NewMenuItem("Обновить список IPset", v.helpView.UpdateIpsetList),
 		fyne.NewMenuItemSeparator(),
 		fyne.NewMenuItem("О программе", v.helpView.ShowAbout),

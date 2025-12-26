@@ -21,6 +21,7 @@ func (a *App) Run() {
 	a.setupTray(iconData)
 	a.requestAssetsPath()
 	a.setupProcessErrorCallback()
+	a.setupSelfUpdater()
 
 	// Создаём MainView через фабрику
 	if a.mainViewFactory != nil {
@@ -142,6 +143,13 @@ func (a *App) ActivateWindow() {
 		a.Window.RequestFocus()
 		a.Logger.Info("Окно успешно активировано")
 	})
+}
+
+// setupSelfUpdater настраивает сервис самообновления приложения
+func (a *App) setupSelfUpdater() {
+	if err := a.Services.SelfUpdate.SetupWithFyne(a.FyneApp, a.Window); err != nil {
+		a.Logger.Warn("Не удалось настроить self-updater", "error", err)
+	}
 }
 
 // requestAssetsPath запрашивает у пользователя путь к файлам zapret

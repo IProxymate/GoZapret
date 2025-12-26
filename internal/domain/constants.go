@@ -67,7 +67,7 @@ const (
 	DefaultAutoStart  = true
 	DefaultGameFilter = false
 	DefaultIpsetMode  = IpsetModeNone
-	DefaultVersion    = "1.0.0"
+	DefaultVersion    = "1.0.3"
 )
 
 // Имена файлов

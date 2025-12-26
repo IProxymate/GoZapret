@@ -33,6 +33,7 @@ type Services struct {
 	Cache       CacheCleaner
 	Autostart   AutostartManager
 	Update      *updates.Service
+	SelfUpdate  *updates.SelfUpdater
 
 	// Контроллеры
 	StrategyController *StrategyController
@@ -98,6 +99,7 @@ func NewServices(logger *slog.Logger) *Services {
 		Cache:       services.NewCacheService(),
 		Autostart:   autostart.NewService(),
 		Update:      updates.NewService("https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest"),
+		SelfUpdate:  updates.NewSelfUpdater(domain.DefaultVersion),
 
 		StrategyController: strategyController,
 	}

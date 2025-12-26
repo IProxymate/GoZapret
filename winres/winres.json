@@ -19,7 +19,7 @@
       "0409": {
         "identity": {
           "name": "GoZapret",
-          "version": "1.0.0.0"
+          "version": "1.0.3.0"
         },
         "description": "GoZapret - инструмент обхода блокировок",
         "minimum-os": "win7",
@@ -43,22 +43,22 @@
     "#1": {
       "0000": {
         "fixed": {
-          "file_version": "1.0.0.0",
-          "product_version": "1.0.0.0"
+          "file_version": "1.0.3.0",
+          "product_version": "1.0.3.0"
         },
         "info": {
           "0409": {
             "Comments": "GoZapret - обход блокировок",
             "CompanyName": "GoZapret",
             "FileDescription": "GoZapret - инструмент обхода блокировок",
-            "FileVersion": "1.0.0.0",
+            "FileVersion": "1.0.3.0",
             "InternalName": "GoZapret",
             "LegalCopyright": "Copyright © 2025",
             "LegalTrademarks": "",
             "OriginalFilename": "GoZapret.exe",
             "PrivateBuild": "",
             "ProductName": "GoZapret",
-            "ProductVersion": "1.0.0.0",
+            "ProductVersion": "1.0.3.0",
             "SpecialBuild": ""
           }
         }
@@ -66,3 +66,4 @@
     }
   }
 }
+

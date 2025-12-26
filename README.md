@@ -1,133 +1,85 @@
 <div align="center">
 
-# Zapret GUI
+# GoZapret
 
-![Zapret GUI Icon](assets/icon256.png)
+![GoZapret Icon](assets/icon256.png)
 
-GUI обертка над [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) - инструментом для обхода блокировок интернет-ресурсов.
+Графический интерфейс для [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)
+
+[![GitHub release](https://img.shields.io/github/v/release/IProxymate/GoZapret)](https://github.com/IProxymate/GoZapret/releases)
 
 </div>
 
-## 🚀 Особенности
+## Возможности
 
-### Как это работает
+### Управление стратегиями
+- 🚀 Запуск и остановка стратегий в один клик
+- 📋 Автоматическое обнаружение .bat файлов стратегий
+- 💾 Сохранение последней использованной стратегии
+- ⚡ Автозапуск при старте Windows
 
-Приложение предоставляет графический интерфейс для управления инструментом [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube), который реализует различные методы обхода блокировок, включая:
-- DNS-обфускацию
-- HTTP/HTTPS прокси
-- SNI-прокси
-- UDP туннелирование
+### Настройки
+- 🎮 **Game Filter** — фильтрация UDP трафика для игр
+- 🌐 **Режимы IPset** — выбор режима работы (any/none/loaded)
+- 📝 **Списки доменов** — добавление своих доменов для включения/исключения
+- 🔧 **Пользовательские подсети** — настройка IPset
 
-Программа автоматически обнаруживает стратегии подключения, запускает и останавливает их через удобный интерфейс, не требуя знания командной строки.
+### Инструменты
+- 🔍 **Диагностика системы** — проверка прав администратора, драйвера WinDivert, сетевого подключения, конфликтующих программ
+- 🌐 **Проверка домена** — тестирование доступности сайтов
+- 📊 **Мониторинг** — отслеживание состояния приложения
+- 🧹 **Очистка кэша Discord**
+
+### Обновления
+- 🔄 Автоматическое обновление приложения из GitHub
+- 📦 Обновление ресурсов zapret
+- 📋 Обновление списка IPset
 
 <div align="center">
-
-<img width="802" height="636" alt="Снимок экрана 2025-11-18 035522" src="https://github.com/user-attachments/assets/e44d575c-ce37-49e4-8427-81e21e18311c" />
-
+<img width="802" alt="GoZapret Screenshot" src="https://github.com/user-attachments/assets/e44d575c-ce37-49e4-8427-81e21e18311c" />
 </div>
 
-### Ключевые возможности
+## Установка
 
-✅ **Управление стратегиями**
-- Автоматическое обнаружение .bat файлов стратегий
-- Запуск и остановка стратегий одним кликом
-- Сохранение последней использованной стратегии
+1. Скачайте и распакуйте [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube/releases)
+2. Скачайте [GoZapret.exe](https://github.com/IProxymate/GoZapret/releases/latest)
+3. Запустите GoZapret и укажите путь к папке zapret
 
-✅ **Диагностика системы**
-- Проверка прав администратора
-- Проверка драйвера WinDivert
-- Проверка сетевого подключения
-- и другое.
+## Использование
 
-✅ **Дополнительные функции**
-- Очистка кэша Discord
-- Управление режимами IPset (any/none/loaded)
-- Game Filter для фильтрации UDP трафика
-- Автозапуск при старте системы
-- Возможность обновления стратегий из оригинального репозитория
-- Добавление своих доменов в списки
-- Базовая проверка работоспособности домена через curl
+1. Выберите стратегию из списка
+2. При необходимости включите Game Filter или настройте режим IPset
+3. Нажмите **Запустить**
+4. Готово!
 
-## 📋 Требования
+## Требования
 
 - Windows 10/11
-- Права администратора для запуска стратегий
-- Файлы [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)
+- Права администратора
 
-## 🎯 Использование
+## Сборка из исходников
 
-1. **Первый запуск**
-   - Запустите [`GoZapret.exe`](GoZapret.exe)
-   - Укажите путь к папке с файлами [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)
-   - Нажмите "Сохранить"
-
-2. **Запуск стратегии**
-   - Выберите стратегию из выпадающего списка
-   - Настройте Game Filter и режим IPset при необходимости
-   - Нажмите "Запустить"
-   - Для остановки нажмите "Остановить"
-
-3. **Диагностика**
-   - Нажмите "Диагностика" для проверки системы
-   - Просмотрите результаты проверок
-
-4. **Очистка кэша Discord**
-   - Нажмите "Очистить кэш Discord"
-   - Подтвердите действие
-   - Discord будет закрыт и кэш очищен
-
-
-## ⚙️ Конфигурация приложения
-Конфигурация хранится в JSON файле и ручных изменений не требует:
-- Windows: `%APPDATA%\GoZapret\config.json`
-
-Пример конфигурации:
-```json
-{
-  "last_strategy_name": "general",
-  "assets_path": "C:\\zapret",
-  "auto_start": false,
-  "game_filter": true,
-  "ipset_mode": "any",
-  "version": "1.0.0",
-  "updated_at": "2024-01-01T00:00:00Z"
-}
-```
-
-## 📦 Установка
-
-### Из исходников
-
-```bash
-# Клонируйте репозиторий
+```powershell
 git clone https://github.com/IProxymate/GoZapret
 cd GoZapret
 
-# Установите зависимости
+# Установка зависимостей
 go mod download
-
-# Установите go-winres для обработки ресурсов Windows
 go install github.com/tc-hib/go-winres@latest
 
-# Обновите ресурсы Windows (иконки, манифест)
+# Генерация ресурсов Windows (иконка, манифест администратора)
 go-winres make
 
-# Соберите приложение
-fyne package -os windows -icon ./assets/icon256.png -release -app-id gozapret.com
+# Сборка
+go build -ldflags "-s -w -H=windowsgui" .
 ```
 
-### Готовый бинарник
+Или используйте скрипт для сборки релиза:
+```powershell
+.\build_release.ps1 -Version "1.0.0"
+```
 
-Скачайте последний релиз из раздела Releases.
+## Благодарности
 
-## 🙏 Благодарности
-
-- [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) - за удобный запуск различных стратегий
-- [zapret](https://github.com/bol-van/zapret) - за основной инструмент обхода блокировок
-
-## 💬 Поддержка
-
-Если у вас возникли проблемы или вопросы:
-1. Проверьте раздел Issues
-2. Создайте новый issue с подробным описанием проблемы
-3. Приложите логи и скриншоты при необходимости
+- [zapret](https://github.com/bol-van/zapret) — bol-van
+- [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) — Flowseal
