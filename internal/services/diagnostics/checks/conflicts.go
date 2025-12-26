@@ -43,8 +43,9 @@ func (c *ConflictingBypassesCheck) Check() *domain.DiagnosticResult {
 	if len(foundConflicts) > 0 {
 		result.Success = false
 		result.Message = "ERROR"
-		result.Details["result"] = "Найдены: " + strings.Join(foundConflicts, ", ")
+		result.Details["result"] = "Найдены конфликтующие сервисы: " + strings.Join(foundConflicts, ", ")
 		result.Details["conflicts"] = foundConflicts
+		result.Details["hint"] = "Удалите эти сервисы через меню 'Удалить службы' или вручную через services.msc"
 	} else {
 		result.Success = true
 		result.Message = "OK"
@@ -108,10 +109,10 @@ func (c *ProxyCheck) Check() *domain.DiagnosticResult {
 	}
 
 	result.Success = false
-	result.Message = "ERROR"
-	result.Details["result"] = "Включён: " + proxyServer
+	result.Message = "WARN"
+	result.Details["result"] = "Системный прокси включён: " + proxyServer
 	result.Details["proxy_server"] = proxyServer
-	result.Details["output"] = string(output)
+	result.Details["hint"] = "Убедитесь, что прокси работает корректно, или отключите его если не используете"
 
 	return result
 }
@@ -167,61 +168,118 @@ func (c *TCPTimestampsCheck) Check() *domain.DiagnosticResult {
 }
 
 // NewAdguardCheck создаёт проверку Adguard сервиса (через процесс)
-func NewAdguardCheck() *ProcessCheck {
-	return NewProcessCheck(
+func NewAdguardCheck() *ProcessCheckWithHint {
+	return NewProcessCheckWithHint(
 		"Проверка наличия Adguard сервиса",
 		"AdguardSvc.exe",
 		"Adguard сервис не найден",
-		"Найден процесс AdguardSvc.exe",
+		"Найден процесс AdguardSvc.exe. Adguard может вызывать проблемы с Discord",
+		"https://github.com/Flowseal/zapret-discord-youtube/issues/417",
 	)
 }
 
 // NewKillerServicesCheck создаёт проверку Killer сервисов
-func NewKillerServicesCheck() *ServiceCheck {
-	return NewServiceCheck(ServiceCheckConfig{
+func NewKillerServicesCheck() *ServiceCheckWithHint {
+	return NewServiceCheckWithHint(ServiceCheckConfig{
 		Name:           "Проверка наличия конфликтующих Killer сервисов",
 		SearchPatterns: []string{"killer"},
 		SuccessMessage: "Killer сервисы не найдены",
-		ErrorMessage:   "Найдены сервисы, конфликтующие с zapret",
-	})
+		ErrorMessage:   "Найдены Killer сервисы, конфликтующие с zapret",
+	}, "https://github.com/Flowseal/zapret-discord-youtube/issues/2512#issuecomment-2821119513")
 }
 
 // NewIntelConnectivityCheck создаёт проверку Intel Connectivity сервиса
-func NewIntelConnectivityCheck() *MultiPatternServiceCheck {
-	return NewMultiPatternServiceCheck(
+func NewIntelConnectivityCheck() *MultiPatternServiceCheckWithHint {
+	return NewMultiPatternServiceCheckWithHint(
 		"Проверка наличия конфликтующего Intel сервиса",
 		[]string{"intel", "connectivity", "network"},
 		"Intel сервисы не найдены",
-		"Найден сервис, конфликтующий с zapret",
+		"Найден Intel Connectivity Network Service, конфликтующий с zapret",
+		"https://github.com/ValdikSS/GoodbyeDPI/issues/541#issuecomment-2661670982",
 	)
 }
 
 // NewCheckPointCheck создаёт проверку Check Point сервисов
-func NewCheckPointCheck() *ServiceCheck {
-	return NewServiceCheck(ServiceCheckConfig{
+func NewCheckPointCheck() *ServiceCheckWithHint {
+	return NewServiceCheckWithHint(ServiceCheckConfig{
 		Name:           "Проверка наличия сервисов Check Point",
 		SearchPatterns: []string{"tracsrvwrapper", "epwd"},
 		SuccessMessage: "Сервисы Check Point не найдены",
-		ErrorMessage:   "Найдены сервисы, конфликтующие с zapret",
-	})
+		ErrorMessage:   "Найдены сервисы Check Point, конфликтующие с zapret",
+	}, "Попробуйте удалить Check Point")
 }
 
 // NewSmartByteCheck создаёт проверку SmartByte сервисов
-func NewSmartByteCheck() *ServiceCheck {
-	return NewServiceCheck(ServiceCheckConfig{
+func NewSmartByteCheck() *ServiceCheckWithHint {
+	return NewServiceCheckWithHint(ServiceCheckConfig{
 		Name:           "Проверка наличия сервисов SmartByte",
 		SearchPatterns: []string{"smartbyte"},
 		SuccessMessage: "Сервисы SmartByte не найдены",
-		ErrorMessage:   "Найдены сервисы, конфликтующие с zapret",
-	})
+		ErrorMessage:   "Найдены сервисы SmartByte, конфликтующие с zapret",
+	}, "Попробуйте удалить или отключить SmartByte через services.msc")
 }
 
-// NewVPNServicesCheck создаёт проверку VPN сервисов
-func NewVPNServicesCheck() *ServiceCheck {
-	return NewServiceCheck(ServiceCheckConfig{
-		Name:           "Проверка наличия VPN сервисов",
-		SearchPatterns: []string{"vpn"},
-		SuccessMessage: "VPN сервисы не найдены",
-		ErrorMessage:   "Найдены сервисы, возможен конфликт",
-	})
+// VPNServicesCheck проверка VPN сервисов с выводом списка найденных
+type VPNServicesCheck struct{}
+
+func NewVPNServicesCheck() *VPNServicesCheck {
+	return &VPNServicesCheck{}
+}
+
+func (c *VPNServicesCheck) Name() string {
+	return "Проверка наличия VPN сервисов"
+}
+
+func (c *VPNServicesCheck) Check() *domain.DiagnosticResult {
+	start := time.Now()
+	output, err := utils.OutputHidden("sc", "query")
+
+	result := &domain.DiagnosticResult{
+		Name:      c.Name(),
+		Timestamp: time.Now(),
+		Duration:  time.Since(start),
+		Details:   make(map[string]interface{}),
+	}
+
+	if err != nil {
+		result.Success = false
+		result.Message = "ERROR"
+		result.Details["result"] = "Не удалось выполнить команду sc query"
+		result.Details["error"] = err.Error()
+		return result
+	}
+
+	// Ищем VPN сервисы и собираем их имена
+	var foundVPNServices []string
+	lines := strings.Split(string(output), "\n")
+	
+	for _, line := range lines {
+		lineLower := strings.ToLower(line)
+		if strings.Contains(lineLower, "vpn") {
+			// Извлекаем имя сервиса из строки SERVICE_NAME: xxx
+			if strings.Contains(lineLower, "service_name") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) >= 2 {
+					serviceName := strings.TrimSpace(parts[1])
+					if serviceName != "" {
+						foundVPNServices = append(foundVPNServices, serviceName)
+					}
+				}
+			}
+		}
+	}
+
+	if len(foundVPNServices) > 0 {
+		result.Success = false
+		result.Message = "WARN"
+		result.Details["result"] = "Найдены VPN сервисы: " + strings.Join(foundVPNServices, ", ")
+		result.Details["vpn_services"] = foundVPNServices
+		result.Details["hint"] = "Некоторые VPN могут конфликтовать с zapret. Убедитесь, что все VPN отключены."
+	} else {
+		result.Success = true
+		result.Message = "OK"
+		result.Details["result"] = "VPN сервисы не найдены"
+	}
+
+	return result
 }

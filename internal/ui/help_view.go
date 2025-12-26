@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,32 +34,117 @@ func NewHelpView(a *app.App) *HelpView {
 // ShowAbout показывает окно "О программе"
 func (v *HelpView) ShowAbout() {
 	cfg := v.app.Services.Config.GetConfig()
-	aboutText := fmt.Sprintf(`**Zapret GUI**
 
-Графический интерфейс для winws (zapret)
+	// Создаём отдельное окно вместо диалога
+	aboutWindow := v.app.FyneApp.NewWindow("О программе")
+	aboutWindow.Resize(fyne.NewSize(550, 500))
+	aboutWindow.CenterOnScreen()
 
-**Версия:** %s
+	// Заголовок
+	titleLabel := widget.NewLabelWithStyle("GoZapret", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	subtitleLabel := widget.NewLabelWithStyle("Графический интерфейс для winws (zapret)", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 
-**Описание:**
-Zapret GUI предоставляет удобный графический интерфейс для управления zapret - инструментом для обхода блокировок интернет-ресурсов.
+	// Версия
+	versionCard := widget.NewCard("", "", container.NewVBox(
+		container.NewHBox(
+			widget.NewLabel("Версия приложения:"),
+			widget.NewLabelWithStyle(cfg.Version, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		),
+		container.NewHBox(
+			widget.NewLabel("Путь к ресурсам:"),
+			widget.NewLabel(v.truncatePath(cfg.AssetsPath.String(), 40)),
+		),
+	))
 
-**Возможности:**
-• Запуск и остановка стратегий zapret
-• Диагностика системы
+	// Описание
+	descriptionText := `GoZapret предоставляет удобный графический интерфейс для управления zapret - инструментом для обхода DPI-блокировок интернет-ресурсов.
+
+Приложение позволяет легко переключаться между стратегиями обхода, настраивать параметры и диагностировать проблемы.`
+
+	descLabel := widget.NewLabel(descriptionText)
+	descLabel.Wrapping = fyne.TextWrapWord
+
+	// Возможности
+	featuresText := `• Запуск и остановка стратегий zapret
+• Выбор стратегии из списка доступных
+• Режим Game Filter для игрового трафика
+• Управление режимами IPset (any/none/loaded)
+• Диагностика системы и проверка конфликтов
+• Проверка доступности доменов
+• Мониторинг приложения
 • Очистка кэша Discord
 • Автозапуск при старте системы
-• Управление режимами IPset
 • Автоматическое обновление
+• Редактирование списков доменов`
 
-**Репозиторий:** github.com/Flowseal/zapret-discord-youtube
+	featuresLabel := widget.NewLabel(featuresText)
+	featuresCard := widget.NewCard("Возможности", "", featuresLabel)
 
-© 2024 Zapret GUI`, cfg.Version)
+	// Ссылки
+	repoLink := widget.NewHyperlink("GitHub: zapret-discord-youtube", parseURL("https://github.com/Flowseal/zapret-discord-youtube"))
+	guiRepoLink := widget.NewHyperlink("GitHub: GoZapret (GUI)", parseURL("https://github.com/IProxymate/GoZapret"))
+	issuesLink := widget.NewHyperlink("Сообщить о проблеме", parseURL("https://github.com/IProxymate/GoZapret/issues"))
+	originalLink := widget.NewHyperlink("Оригинальный zapret (bol-van)", parseURL("https://github.com/bol-van/zapret"))
 
-	aboutLabel := widget.NewRichTextFromMarkdown(aboutText)
-	scroll := container.NewScroll(aboutLabel)
-	scroll.SetMinSize(fyne.NewSize(500, 400))
+	linksCard := widget.NewCard("Ссылки", "", container.NewVBox(
+		guiRepoLink,
+		repoLink,
+		issuesLink,
+		originalLink,
+	))
 
-	dialog.ShowCustom("О программе", "Закрыть", scroll, v.app.Window)
+	// Благодарности
+	thanksText := `• bol-van - автор оригинального zapret
+• Flowseal - адаптация для Discord/YouTube
+• Сообщество - тестирование и обратная связь`
+	thanksLabel := widget.NewLabel(thanksText)
+	thanksCard := widget.NewCard("Благодарности", "", thanksLabel)
+
+	// Копирайт
+	copyrightLabel := widget.NewLabelWithStyle("© 2024-2025 GoZapret", fyne.TextAlignCenter, fyne.TextStyle{})
+
+	// Кнопка закрытия
+	closeButton := widget.NewButton("Закрыть", func() {
+		aboutWindow.Close()
+	})
+
+	// Компоновка
+	content := container.NewVBox(
+		titleLabel,
+		subtitleLabel,
+		widget.NewSeparator(),
+		versionCard,
+		widget.NewSeparator(),
+		descLabel,
+		widget.NewSeparator(),
+		featuresCard,
+		linksCard,
+		thanksCard,
+		widget.NewSeparator(),
+		copyrightLabel,
+		closeButton,
+	)
+
+	scroll := container.NewScroll(content)
+	aboutWindow.SetContent(container.NewPadded(scroll))
+	aboutWindow.Show()
+}
+
+// truncatePath обрезает путь если он слишком длинный
+func (v *HelpView) truncatePath(path string, maxLen int) string {
+	if len(path) <= maxLen {
+		return path
+	}
+	if path == "" {
+		return "Не задан"
+	}
+	return "..." + path[len(path)-maxLen+3:]
+}
+
+// parseURL парсит URL для гиперссылки
+func parseURL(urlStr string) *url.URL {
+	u, _ := url.Parse(urlStr)
+	return u
 }
 
 // CheckForUpdates проверяет наличие обновлений
@@ -214,7 +300,7 @@ func (v *HelpView) performUpdate(versionInfo *updates.VersionInfo, state *update
 
 	// Останавливаем процесс - всегда пытаемся остановить, независимо от state.wasRunning
 	// (процесс мог быть запущен извне или состояние могло быть неточным)
-	v.updateStatus(statusLabel, "Остановка процесса...")
+		v.updateStatus(statusLabel, "Остановка процесса...")
 	
 	// Сначала пытаемся остановить через контроллер
 	_ = v.app.Services.StrategyController.StopStrategy()

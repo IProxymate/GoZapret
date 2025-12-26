@@ -202,3 +202,188 @@ func (c *MultiPatternServiceCheck) Check() *domain.DiagnosticResult {
 	return result
 }
 
+// ServiceCheckWithHint проверка сервисов с подсказкой
+type ServiceCheckWithHint struct {
+	config ServiceCheckConfig
+	hint   string
+}
+
+// NewServiceCheckWithHint создаёт новую проверку сервисов с подсказкой
+func NewServiceCheckWithHint(config ServiceCheckConfig, hint string) *ServiceCheckWithHint {
+	return &ServiceCheckWithHint{config: config, hint: hint}
+}
+
+func (c *ServiceCheckWithHint) Name() string {
+	return c.config.Name
+}
+
+func (c *ServiceCheckWithHint) Check() *domain.DiagnosticResult {
+	start := time.Now()
+	output, err := utils.OutputHidden("sc", "query")
+
+	result := &domain.DiagnosticResult{
+		Name:      c.Name(),
+		Timestamp: time.Now(),
+		Duration:  time.Since(start),
+		Details:   make(map[string]interface{}),
+	}
+
+	if err != nil {
+		result.Success = false
+		result.Message = "ERROR"
+		result.Details["result"] = "Не удалось выполнить команду sc query"
+		result.Details["error"] = err.Error()
+		return result
+	}
+
+	outputStr := string(output)
+	searchOutput := outputStr
+	if !c.config.CaseSensitive {
+		searchOutput = strings.ToLower(outputStr)
+	}
+
+	// Проверяем все паттерны
+	found := false
+	for _, pattern := range c.config.SearchPatterns {
+		searchPattern := pattern
+		if !c.config.CaseSensitive {
+			searchPattern = strings.ToLower(pattern)
+		}
+		if strings.Contains(searchOutput, searchPattern) {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		result.Success = false
+		result.Message = "ERROR"
+		result.Details["result"] = c.config.ErrorMessage
+		result.Details["hint"] = c.hint
+	} else {
+		result.Success = true
+		result.Message = "OK"
+		result.Details["result"] = c.config.SuccessMessage
+	}
+
+	return result
+}
+
+// ProcessCheckWithHint проверка процесса с подсказкой
+type ProcessCheckWithHint struct {
+	name           string
+	processName    string
+	successMessage string
+	errorMessage   string
+	hint           string
+}
+
+// NewProcessCheckWithHint создаёт новую проверку процесса с подсказкой
+func NewProcessCheckWithHint(name, processName, successMessage, errorMessage, hint string) *ProcessCheckWithHint {
+	return &ProcessCheckWithHint{
+		name:           name,
+		processName:    processName,
+		successMessage: successMessage,
+		errorMessage:   errorMessage,
+		hint:           hint,
+	}
+}
+
+func (c *ProcessCheckWithHint) Name() string {
+	return c.name
+}
+
+func (c *ProcessCheckWithHint) Check() *domain.DiagnosticResult {
+	start := time.Now()
+	output, err := utils.OutputHidden("tasklist", "/FI", "IMAGENAME eq "+c.processName)
+
+	result := &domain.DiagnosticResult{
+		Name:      c.Name(),
+		Timestamp: time.Now(),
+		Duration:  time.Since(start),
+		Details:   make(map[string]interface{}),
+	}
+
+	if err != nil || !strings.Contains(string(output), c.processName) {
+		result.Success = true
+		result.Message = "OK"
+		result.Details["result"] = c.successMessage
+		return result
+	}
+
+	result.Success = false
+	result.Message = "ERROR"
+	result.Details["result"] = c.errorMessage
+	result.Details["hint"] = c.hint
+
+	return result
+}
+
+// MultiPatternServiceCheckWithHint проверка сервисов с несколькими паттернами и подсказкой
+type MultiPatternServiceCheckWithHint struct {
+	name           string
+	patterns       []string
+	successMessage string
+	errorMessage   string
+	hint           string
+}
+
+// NewMultiPatternServiceCheckWithHint создаёт проверку с несколькими обязательными паттернами и подсказкой
+func NewMultiPatternServiceCheckWithHint(name string, patterns []string, successMessage, errorMessage, hint string) *MultiPatternServiceCheckWithHint {
+	return &MultiPatternServiceCheckWithHint{
+		name:           name,
+		patterns:       patterns,
+		successMessage: successMessage,
+		errorMessage:   errorMessage,
+		hint:           hint,
+	}
+}
+
+func (c *MultiPatternServiceCheckWithHint) Name() string {
+	return c.name
+}
+
+func (c *MultiPatternServiceCheckWithHint) Check() *domain.DiagnosticResult {
+	start := time.Now()
+	output, err := utils.OutputHidden("sc", "query")
+
+	result := &domain.DiagnosticResult{
+		Name:      c.Name(),
+		Timestamp: time.Now(),
+		Duration:  time.Since(start),
+		Details:   make(map[string]interface{}),
+	}
+
+	if err != nil {
+		result.Success = false
+		result.Message = "ERROR"
+		result.Details["result"] = "Не удалось выполнить команду sc query"
+		result.Details["error"] = err.Error()
+		return result
+	}
+
+	outputLower := strings.ToLower(string(output))
+
+	// Все паттерны должны быть найдены
+	allFound := true
+	for _, pattern := range c.patterns {
+		if !strings.Contains(outputLower, strings.ToLower(pattern)) {
+			allFound = false
+			break
+		}
+	}
+
+	if allFound {
+		result.Success = false
+		result.Message = "ERROR"
+		result.Details["result"] = c.errorMessage
+		result.Details["hint"] = c.hint
+	} else {
+		result.Success = true
+		result.Message = "OK"
+		result.Details["result"] = c.successMessage
+	}
+
+	return result
+}
+

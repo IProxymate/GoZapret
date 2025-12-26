@@ -322,8 +322,8 @@ func (v *MainView) UpdateStrategyOptions(items []string, selectedStrategy string
 		v.strategySelect.Options = items
 		if finalSelected != "" {
 			v.strategySelect.SetSelected(finalSelected)
-		}
-		v.strategySelect.Refresh()
+	}
+	v.strategySelect.Refresh()
 	}
 }
 
@@ -528,39 +528,82 @@ func (v *MainView) runDiagnostics() {
 
 // showDiagnosticResults показывает результаты диагностики
 func (v *MainView) showDiagnosticResults(results []*domain.DiagnosticResult) {
-	// Создаем таблицу с результатами
-	table := widget.NewTable(
-		func() (int, int) { return len(results), 3 },
-		func() fyne.CanvasObject {
-			return widget.NewLabel("template")
-		},
-		func(id widget.TableCellID, obj fyne.CanvasObject) {
-			label := obj.(*widget.Label)
-			if id.Row < len(results) {
-				switch id.Col {
-				case 0:
-					label.SetText(results[id.Row].Name)
-				case 1:
-					if results[id.Row].Success {
-						label.SetText("✓ Успех")
-					} else {
-						label.SetText("✗ Ошибка")
-					}
-				case 2:
-					label.SetText(results[id.Row].Message)
-				}
-			}
-		},
+	// Подсчитываем статистику
+	successCount := 0
+	warnCount := 0
+	errorCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		} else if r.Message == "WARN" {
+			warnCount++
+		} else {
+			errorCount++
+		}
+	}
+
+	// Создаём заголовок со статистикой
+	statsText := fmt.Sprintf("Всего проверок: %d | ✓ Успешно: %d | ⚠ Предупреждения: %d | ✗ Ошибки: %d",
+		len(results), successCount, warnCount, errorCount)
+	statsLabel := widget.NewLabel(statsText)
+	statsLabel.Importance = widget.MediumImportance
+
+	// Создаем список результатов с детальной информацией
+	resultsList := container.NewVBox()
+
+	for _, result := range results {
+		// Определяем статус и цвет
+		var statusIcon string
+		var importance widget.Importance
+		if result.Success {
+			statusIcon = "✓"
+			importance = widget.SuccessImportance
+		} else if result.Message == "WARN" {
+			statusIcon = "⚠"
+			importance = widget.WarningImportance
+		} else {
+			statusIcon = "✗"
+			importance = widget.DangerImportance
+		}
+
+		// Название проверки со статусом
+		titleLabel := widget.NewLabel(fmt.Sprintf("%s %s", statusIcon, result.Name))
+		titleLabel.Importance = importance
+		titleLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+		// Детали результата
+		detailText := ""
+		if resultDetail, ok := result.Details["result"].(string); ok {
+			detailText = resultDetail
+		}
+
+		// Добавляем подсказку если есть
+		if hint, ok := result.Details["hint"].(string); ok && hint != "" {
+			detailText += "\n💡 " + hint
+		}
+
+		detailLabel := widget.NewLabel(detailText)
+		detailLabel.Wrapping = fyne.TextWrapWord
+
+		// Создаем карточку для каждого результата
+		card := widget.NewCard("", "", container.NewVBox(titleLabel, detailLabel))
+		resultsList.Add(card)
+	}
+
+	// Скролл для списка результатов
+	scroll := container.NewScroll(resultsList)
+	scroll.SetMinSize(fyne.NewSize(600, 400))
+
+	// Общий контейнер
+	content := container.NewBorder(
+		statsLabel, // top
+		nil,        // bottom
+		nil,        // left
+		nil,        // right
+		scroll,     // center
 	)
 
-	table.SetColumnWidth(0, 400)
-	table.SetColumnWidth(1, 150)
-	table.SetColumnWidth(2, 150)
-
-	scroll := container.NewScroll(table)
-	scroll.SetMinSize(fyne.NewSize(780, 450))
-
-	dialog.ShowCustom("Результаты диагностики", "Закрыть", scroll, v.app.Window)
+	dialog.ShowCustom("Результаты диагностики", "Закрыть", content, v.app.Window)
 }
 
 // clearCache очищает кэш Discord
