@@ -68,6 +68,7 @@ type ProcessInfo struct {
 	StartedAt time.Time     `json:"started_at"`
 	Status    ProcessStatus `json:"status"`
 	Command   *exec.Cmd     `json:"-"`
+	LastError string        `json:"last_error,omitempty"` // Последняя ошибка процесса
 }
 
 // ProcessStatus представляет статус процесса

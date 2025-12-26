@@ -47,21 +47,6 @@ func NewHiddenCommandContext(ctx context.Context, name string, args ...string) *
 	return cmd
 }
 
-// NewHiddenCommandWithDir создает новую команду с скрытым окном и рабочей директорией.
-//
-// Параметры:
-//   - ctx: контекст для управления временем жизни команды
-//   - workDir: рабочая директория для выполнения команды
-//   - name: имя исполняемого файла или путь к нему
-//   - args: аргументы командной строки
-//
-// Возвращает настроенную команду *exec.Cmd
-func NewHiddenCommandWithDir(ctx context.Context, workDir, name string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = workDir
-	SetupHiddenCommand(cmd)
-	return cmd
-}
 
 // RunHidden выполняет команду со скрытым окном и возвращает ошибку.
 // Используйте когда вам нужно только выполнить команду без получения вывода.

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 
+	"github.com/IProxymate/GoZapret/internal/app"
 	"github.com/IProxymate/GoZapret/internal/domain"
 
 	"fyne.io/fyne/v2"
@@ -13,20 +14,20 @@ import (
 
 // SettingsView представляет окно настроек
 type SettingsView struct {
-	app    *App
+	app    *app.App
 	window fyne.Window
 }
 
 // NewSettingsView создает новое окно настроек
-func NewSettingsView(app *App) *SettingsView {
+func NewSettingsView(a *app.App) *SettingsView {
 	return &SettingsView{
-		app: app,
+		app: a,
 	}
 }
 
 // Show показывает окно настроек
 func (v *SettingsView) Show() {
-	v.window = v.app.fyneApp.NewWindow("Настройки")
+	v.window = v.app.FyneApp.NewWindow("Настройки")
 	v.window.Resize(fyne.NewSize(600, 300))
 	v.window.CenterOnScreen()
 
@@ -38,7 +39,7 @@ func (v *SettingsView) Show() {
 // buildContent строит содержимое окна настроек
 func (v *SettingsView) buildContent() fyne.CanvasObject {
 	// Путь к ресурсам
-	assetsPath := v.app.configManager.GetAssetsPath()
+	assetsPath := v.app.Services.Config.GetAssetsPath()
 	assetsPathEntry := widget.NewEntry()
 	assetsPathEntry.SetText(assetsPath.String())
 	assetsPathEntry.SetPlaceHolder("Путь к файлам zapret...")
@@ -57,14 +58,14 @@ func (v *SettingsView) buildContent() fyne.CanvasObject {
 	pathContainer := container.NewBorder(nil, nil, nil, browseButton, assetsPathEntry)
 
 	// Автозапуск
-	autoStartCheck := widget.NewCheckWithData("Запускать приложение автоматически", v.app.autoStart)
+	autoStartCheck := widget.NewCheckWithData("Запускать приложение автоматически", v.app.State.AutoStart)
 	autoStartCheck.OnChanged = func(checked bool) {
 		// Обновляем конфигурацию и применяем настройку автозапуска через сервис
-		if err := v.app.configManager.SetAutoStartWithService(checked, v.app.autostartService); err != nil {
+		if err := v.app.Services.Config.SetAutoStartWithService(checked, v.app.Services.Autostart); err != nil {
 			dialog.ShowError(fmt.Errorf("ошибка настройки автозапуска: %v", err), v.window)
 		} else {
 			// Обновляем состояние биндинга, чтобы гарантировать согласованность
-			v.app.autoStart.Set(checked)
+			v.app.State.AutoStart.Set(checked)
 		}
 	}
 
@@ -81,20 +82,17 @@ func (v *SettingsView) buildContent() fyne.CanvasObject {
 		}
 
 		// Сохраняем путь
-		if err := v.app.configManager.SetAssetsPath(newPath); err != nil {
+		if err := v.app.Services.Config.SetAssetsPath(newPath); err != nil {
 			dialog.ShowError(err, v.window)
 			return
 		}
 
-		// Подготавливаем рабочую директорию с новыми файлами
+		// Перезагружаем стратегии и обновляем рабочую директорию
 		if newPath != "" {
-			if err := v.app.configManager.PrepareWorkingDirectory(); err != nil {
-				dialog.ShowError(fmt.Errorf("ошибка подготовки рабочей директории: %v", err), v.window)
+			if err := v.app.ReloadStrategies(); err != nil {
+				dialog.ShowError(err, v.window)
 				return
 			}
-
-			// Перезагружаем стратегии
-			v.app.loadStrategies(newPath)
 		}
 
 		dialog.ShowInformation("Успех", "Настройки сохранены", v.window)

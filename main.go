@@ -3,9 +3,13 @@ package main
 import (
 	"embed"
 	"log/slog"
+	"os"
 
+	"github.com/IProxymate/GoZapret/internal/app"
+	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/logger"
 	"github.com/IProxymate/GoZapret/internal/ui"
+	"github.com/IProxymate/GoZapret/internal/utils"
 )
 
 //go:embed assets/*
@@ -29,9 +33,38 @@ func main() {
 	// Устанавливаем как глобальный логгер
 	slog.SetDefault(log)
 
-	slog.Debug("Запуск приложения GoZapret")
+	log.Debug("Запуск приложения", "app", domain.AppName)
 
-	app := ui.NewApp(Assets, log)
+	// Создаем менеджер единственного экземпляра
+	singleInstance := utils.NewSingleInstance(domain.AppName)
+	singleInstance.SetLogger(log)
 
-	app.Run()
+	// Пытаемся захватить мьютекс
+	isFirst, err := singleInstance.TryAcquire()
+	if err != nil {
+		log.Error("Ошибка проверки единственного экземпляра", "error", err)
+		os.Exit(1)
+	}
+
+	if !isFirst {
+		// Уже запущен другой экземпляр - отправляем команду активации
+		log.Info("Приложение уже запущено, отправка команды активации")
+		if err := singleInstance.SendActivateCommand(); err != nil {
+			log.Warn("Не удалось отправить команду активации", "error", err)
+		}
+		os.Exit(0)
+	}
+
+	// Освобождаем мьютекс при завершении
+	defer singleInstance.Release()
+
+	// Создаем приложение
+	application := app.NewApp(Assets, log, singleInstance)
+
+	// Регистрируем фабрику MainView из пакета ui
+	application.SetMainViewFactory(func(a *app.App) app.MainViewInterface {
+		return ui.NewMainView(a)
+	})
+
+	application.Run()
 }

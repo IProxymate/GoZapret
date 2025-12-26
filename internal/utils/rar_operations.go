@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nwaples/rardecode"
 )
@@ -102,10 +104,21 @@ func ExtractRar(archivePath, extractDir string) (string, error) {
 				return "", err
 			}
 
-			// Открываем файл из архива
-			archiveFile, err := os.Create(extractedFilePath)
+			// Пытаемся создать файл с повторными попытками для заблокированных файлов
+			var archiveFile *os.File
+			maxRetries := 3
+			for retry := 0; retry < maxRetries; retry++ {
+				archiveFile, err = os.Create(extractedFilePath)
+				if err == nil {
+					break
+				}
+				// Если файл заблокирован, ждём и пробуем снова
+				if retry < maxRetries-1 {
+					time.Sleep(time.Duration(retry+1) * time.Second)
+				}
+			}
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("не удалось создать файл %s: %w", extractedFilePath, err)
 			}
 
 			// Копируем содержимое

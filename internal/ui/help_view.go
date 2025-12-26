@@ -2,12 +2,15 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/IProxymate/GoZapret/internal/app"
 	"github.com/IProxymate/GoZapret/internal/domain"
-	"github.com/IProxymate/GoZapret/internal/services"
+	"github.com/IProxymate/GoZapret/internal/services/updates"
 	"github.com/IProxymate/GoZapret/internal/utils"
 
 	"fyne.io/fyne/v2"
@@ -18,50 +21,135 @@ import (
 
 // HelpView представляет функционал меню помощи
 type HelpView struct {
-	app *App
+	app *app.App
 }
 
 // NewHelpView создает новый HelpView
-func NewHelpView(app *App) *HelpView {
+func NewHelpView(a *app.App) *HelpView {
 	return &HelpView{
-		app: app,
+		app: a,
 	}
 }
 
 // ShowAbout показывает окно "О программе"
 func (v *HelpView) ShowAbout() {
-	cfg := v.app.configManager.GetConfig()
-	aboutText := fmt.Sprintf(`**Zapret GUI**
+	cfg := v.app.Services.Config.GetConfig()
 
-Графический интерфейс для winws (zapret)
+	// Создаём отдельное окно вместо диалога
+	aboutWindow := v.app.FyneApp.NewWindow("О программе")
+	aboutWindow.Resize(fyne.NewSize(550, 500))
+	aboutWindow.CenterOnScreen()
 
-**Версия:** %s
+	// Заголовок
+	titleLabel := widget.NewLabelWithStyle("GoZapret", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	subtitleLabel := widget.NewLabelWithStyle("Графический интерфейс для winws (zapret)", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 
-**Описание:**
-Zapret GUI предоставляет удобный графический интерфейс для управления zapret - инструментом для обхода блокировок интернет-ресурсов.
+	// Версия
+	versionCard := widget.NewCard("", "", container.NewVBox(
+		container.NewHBox(
+			widget.NewLabel("Версия приложения:"),
+			widget.NewLabelWithStyle(cfg.Version, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		),
+		container.NewHBox(
+			widget.NewLabel("Путь к ресурсам:"),
+			widget.NewLabel(v.truncatePath(cfg.AssetsPath.String(), 40)),
+		),
+	))
 
-**Возможности:**
-• Запуск и остановка стратегий zapret
-• Диагностика системы
+	// Описание
+	descriptionText := `GoZapret предоставляет удобный графический интерфейс для управления zapret - инструментом для обхода DPI-блокировок интернет-ресурсов.
+
+Приложение позволяет легко переключаться между стратегиями обхода, настраивать параметры и диагностировать проблемы.`
+
+	descLabel := widget.NewLabel(descriptionText)
+	descLabel.Wrapping = fyne.TextWrapWord
+
+	// Возможности
+	featuresText := `• Запуск и остановка стратегий zapret
+• Выбор стратегии из списка доступных
+• Режим Game Filter для игрового трафика
+• Управление режимами IPset (any/none/loaded)
+• Диагностика системы и проверка конфликтов
+• Проверка доступности доменов
+• Мониторинг приложения
 • Очистка кэша Discord
 • Автозапуск при старте системы
-• Управление режимами IPset
 • Автоматическое обновление
+• Редактирование списков доменов`
 
-**Репозиторий:** github.com/Flowseal/zapret-discord-youtube
+	featuresLabel := widget.NewLabel(featuresText)
+	featuresCard := widget.NewCard("Возможности", "", featuresLabel)
 
-© 2024 Zapret GUI`, cfg.Version)
+	// Ссылки
+	repoLink := widget.NewHyperlink("GitHub: zapret-discord-youtube", parseURL("https://github.com/Flowseal/zapret-discord-youtube"))
+	guiRepoLink := widget.NewHyperlink("GitHub: GoZapret (GUI)", parseURL("https://github.com/IProxymate/GoZapret"))
+	issuesLink := widget.NewHyperlink("Сообщить о проблеме", parseURL("https://github.com/IProxymate/GoZapret/issues"))
+	originalLink := widget.NewHyperlink("Оригинальный zapret (bol-van)", parseURL("https://github.com/bol-van/zapret"))
 
-	aboutLabel := widget.NewRichTextFromMarkdown(aboutText)
-	scroll := container.NewScroll(aboutLabel)
-	scroll.SetMinSize(fyne.NewSize(500, 400))
+	linksCard := widget.NewCard("Ссылки", "", container.NewVBox(
+		guiRepoLink,
+		repoLink,
+		issuesLink,
+		originalLink,
+	))
 
-	dialog.ShowCustom("О программе", "Закрыть", scroll, v.app.window)
+	// Благодарности
+	thanksText := `• bol-van - автор оригинального zapret
+• Flowseal - адаптация для Discord/YouTube
+• Сообщество - тестирование и обратная связь`
+	thanksLabel := widget.NewLabel(thanksText)
+	thanksCard := widget.NewCard("Благодарности", "", thanksLabel)
+
+	// Копирайт
+	copyrightLabel := widget.NewLabelWithStyle("© 2024-2025 GoZapret", fyne.TextAlignCenter, fyne.TextStyle{})
+
+	// Кнопка закрытия
+	closeButton := widget.NewButton("Закрыть", func() {
+		aboutWindow.Close()
+	})
+
+	// Компоновка
+	content := container.NewVBox(
+		titleLabel,
+		subtitleLabel,
+		widget.NewSeparator(),
+		versionCard,
+		widget.NewSeparator(),
+		descLabel,
+		widget.NewSeparator(),
+		featuresCard,
+		linksCard,
+		thanksCard,
+		widget.NewSeparator(),
+		copyrightLabel,
+		closeButton,
+	)
+
+	scroll := container.NewScroll(content)
+	aboutWindow.SetContent(container.NewPadded(scroll))
+	aboutWindow.Show()
 }
 
-// CheckForUpdates проверяет наличие обновлений
+// truncatePath обрезает путь если он слишком длинный
+func (v *HelpView) truncatePath(path string, maxLen int) string {
+	if len(path) <= maxLen {
+		return path
+	}
+	if path == "" {
+		return "Не задан"
+	}
+	return "..." + path[len(path)-maxLen+3:]
+}
+
+// parseURL парсит URL для гиперссылки
+func parseURL(urlStr string) *url.URL {
+	u, _ := url.Parse(urlStr)
+	return u
+}
+
+// CheckForUpdates проверяет наличие обновлений ресурсов zapret
 func (v *HelpView) CheckForUpdates() {
-	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка обновлений...")
+	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка обновлений ресурсов zapret...")
 	progressDialog.Show()
 
 	go func() {
@@ -74,23 +162,119 @@ func (v *HelpView) CheckForUpdates() {
 	}()
 }
 
+// CheckForAppUpdates проверяет наличие обновлений самого приложения GoZapret
+func (v *HelpView) CheckForAppUpdates() {
+	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка обновлений GoZapret...")
+	progressDialog.Show()
+
+	v.app.Services.SelfUpdate.CheckForUpdatesManual(
+		// onUpdateAvailable
+		func(newVersion string) {
+			progressDialog.Hide()
+			v.showAppUpdateDialog(newVersion)
+		},
+		// onNoUpdate
+		func() {
+			progressDialog.Hide()
+			currentVersion := v.app.Services.SelfUpdate.GetCurrentVersion()
+			dialog.ShowInformation("Обновления",
+				fmt.Sprintf("У вас установлена последняя версия GoZapret: %s", currentVersion),
+				v.app.Window)
+		},
+		// onError
+		func(err error) {
+			progressDialog.Hide()
+			dialog.ShowError(fmt.Errorf("ошибка проверки обновлений:\n%w", err), v.app.Window)
+		},
+	)
+}
+
+// showAppUpdateDialog показывает диалог с предложением обновить приложение
+func (v *HelpView) showAppUpdateDialog(newVersion string) {
+	currentVersion := v.app.Services.SelfUpdate.GetCurrentVersion()
+
+	message := fmt.Sprintf(`Доступна новая версия GoZapret!
+
+Текущая версия: %s
+Новая версия: %s
+
+Хотите обновить приложение сейчас?
+После обновления приложение будет перезапущено.`, currentVersion, newVersion)
+
+	dialog.ShowConfirm("Доступно обновление", message,
+		func(confirmed bool) {
+			if confirmed {
+				v.performAppUpdate(newVersion)
+			}
+		},
+		v.app.Window)
+}
+
+// performAppUpdate выполняет обновление приложения
+func (v *HelpView) performAppUpdate(newVersion string) {
+	// Останавливаем winws перед обновлением
+	if v.app.Services.Process.IsRunning() {
+		v.app.Logger.Info("Остановка winws перед обновлением приложения")
+		_ = v.app.Services.StrategyController.StopStrategy()
+	}
+
+	// Создаём диалог с прогрессом
+	progressBar := widget.NewProgressBarInfinite()
+	statusLabel := widget.NewLabel("Подготовка к обновлению...")
+
+	dialogContent := container.NewVBox(
+		statusLabel,
+		progressBar,
+	)
+
+	progressDialog := dialog.NewCustomWithoutButtons("Обновление GoZapret", dialogContent, v.app.Window)
+	progressDialog.Show()
+
+	// Запускаем обновление асинхронно
+	v.app.Services.SelfUpdate.PerformUpdateAsync(
+		newVersion,
+		// onProgress
+		func(status string) {
+			statusLabel.SetText(status)
+		},
+		// onSuccess
+		func() {
+			progressDialog.Hide()
+			// Показываем диалог и закрываем приложение для замены exe
+			dialog.ShowInformation("Обновление завершено",
+				"Обновление загружено!\n\nПриложение будет перезапущено.",
+				v.app.Window)
+			// Даём время показать диалог и закрываем
+			go func() {
+				time.Sleep(2 * time.Second)
+				v.app.FyneApp.Quit()
+			}()
+		},
+		// onError
+		func(err error) {
+			progressDialog.Hide()
+			dialog.ShowError(fmt.Errorf("ошибка обновления:\n%w", err), v.app.Window)
+		},
+	)
+}
+
 // checkVersion проверяет версию на GitHub
-func (v *HelpView) checkVersion() (*services.VersionInfo, error) {
-	cfg := v.app.configManager.GetConfig()
-	return v.app.updateService.CheckForUpdates(cfg.Version)
+func (v *HelpView) checkVersion() (*updates.VersionInfo, error) {
+	cfg := v.app.Services.Config.GetConfig()
+	return v.app.Services.Update.CheckForUpdates(cfg.Version)
 }
 
 // handleVersionCheckResult обрабатывает результат проверки версии
-func (v *HelpView) handleVersionCheckResult(versionInfo *services.VersionInfo, err error) {
+func (v *HelpView) handleVersionCheckResult(versionInfo *updates.VersionInfo, err error) {
 	if err != nil {
-		dialog.ShowError(fmt.Errorf("ошибка проверки обновлений:\n%w", err), v.app.window)
+		dialog.ShowError(fmt.Errorf("ошибка проверки обновлений:\n%w", err), v.app.Window)
 		return
 	}
 
 	if !versionInfo.IsNewer {
 		dialog.ShowInformation("Обновления",
 			fmt.Sprintf("У вас установлена последняя версия: %s", versionInfo.Current),
-			v.app.window)
+			v.app.Window)
 		return
 	}
 
@@ -98,7 +282,7 @@ func (v *HelpView) handleVersionCheckResult(versionInfo *services.VersionInfo, e
 }
 
 // showUpdateDialog показывает диалог с вариантами обновления
-func (v *HelpView) showUpdateDialog(versionInfo *services.VersionInfo) {
+func (v *HelpView) showUpdateDialog(versionInfo *updates.VersionInfo) {
 	message := fmt.Sprintf(`Доступна новая версия!
 
 Текущая версия: %s
@@ -110,7 +294,7 @@ func (v *HelpView) showUpdateDialog(versionInfo *services.VersionInfo) {
 	messageLabel.Wrapping = fyne.TextWrapWord
 
 	content := container.NewVBox(messageLabel)
-	customDialog := dialog.NewCustom("Доступно обновление", "Отмена", content, v.app.window)
+	customDialog := dialog.NewCustom("Доступно обновление", "Отмена", content, v.app.Window)
 
 	// Создаем кнопки
 	updateButton := widget.NewButton("Обновить текущую версию", func() {
@@ -136,10 +320,10 @@ func (v *HelpView) showUpdateDialog(versionInfo *services.VersionInfo) {
 }
 
 // updateCurrentVersion обновляет текущую версию
-func (v *HelpView) updateCurrentVersion(versionInfo *services.VersionInfo) {
-	assetsPath := v.app.configManager.GetAssetsPath()
+func (v *HelpView) updateCurrentVersion(versionInfo *updates.VersionInfo) {
+	assetsPath := v.app.Services.Config.GetAssetsPath()
 	if assetsPath == "" {
-		dialog.ShowError(fmt.Errorf("путь к ресурсам не установлен"), v.app.window)
+		dialog.ShowError(fmt.Errorf("путь к ресурсам не установлен"), v.app.Window)
 		return
 	}
 
@@ -157,7 +341,7 @@ func (v *HelpView) updateCurrentVersion(versionInfo *services.VersionInfo) {
 		progressBar,
 	)
 
-	progressDialog := dialog.NewCustomWithoutButtons("Обновление", dialogContent, v.app.window)
+	progressDialog := dialog.NewCustomWithoutButtons("Обновление", dialogContent, v.app.Window)
 	progressDialog.Show()
 
 	// Выполняем обновление в горутине
@@ -173,26 +357,27 @@ type updateState struct {
 
 // captureCurrentState сохраняет текущее состояние приложения
 func (v *HelpView) captureCurrentState() *updateState {
+	controller := v.app.Services.StrategyController
+	
 	state := &updateState{
-		wasRunning: v.app.processManager.IsRunning(),
+		wasRunning: controller.IsRunning(),
 	}
 
 	if state.wasRunning {
-		processInfo := v.app.processManager.GetCurrentProcess()
-		if processInfo != nil {
-			state.lastStrategyName = processInfo.Strategy
+		if currentName := controller.GetCurrentStrategyName(); currentName != "" {
+			state.lastStrategyName = domain.StrategyName(currentName)
 		}
 		if state.lastStrategyName == "" {
-			state.lastStrategyName = v.app.configManager.GetLastStrategyName()
+			state.lastStrategyName = domain.StrategyName(controller.GetLastStrategyName())
 		}
 	}
 
-	state.gameFilter, _ = v.app.gameFilter.Get()
+	state.gameFilter, _ = v.app.State.GameFilter.Get()
 	return state
 }
 
 // performUpdate выполняет процесс обновления
-func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updateState, statusLabel *widget.Label, progressDialog dialog.Dialog) {
+func (v *HelpView) performUpdate(versionInfo *updates.VersionInfo, state *updateState, statusLabel *widget.Label, progressDialog dialog.Dialog) {
 	// Создаем временную директорию
 	tempDir, err := os.MkdirTemp("", "zapret_update_*")
 	if err != nil {
@@ -203,20 +388,34 @@ func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updat
 
 	// Загружаем архив
 	v.updateStatus(statusLabel, "Загрузка архива...")
-	result, err := v.app.updateService.DownloadLatestRelease(versionInfo.Current, tempDir)
+	result, err := v.app.Services.Update.DownloadLatestRelease(versionInfo.Current, tempDir)
 	if err != nil {
 		v.showUpdateError(progressDialog, "ошибка загрузки обновления", err)
 		return
 	}
 
-	// Останавливаем процесс если был запущен
-	if state.wasRunning {
+	// Останавливаем процесс - всегда пытаемся остановить, независимо от state.wasRunning
+	// (процесс мог быть запущен извне или состояние могло быть неточным)
 		v.updateStatus(statusLabel, "Остановка процесса...")
-		if err := v.app.processManager.StopProcess(); err != nil {
-			v.showUpdateError(progressDialog, "ошибка остановки процесса", err)
-			return
-		}
+	
+	// Сначала пытаемся остановить через контроллер
+	_ = v.app.Services.StrategyController.StopStrategy()
+	
+	// Принудительно убиваем все процессы winws
+	_ = utils.RunHidden("taskkill", "/F", "/IM", "winws.exe")
+	
+	// Ждём завершения процесса
+	v.updateStatus(statusLabel, "Ожидание завершения процесса...")
+	if err := v.waitForProcessTermination(5 * time.Second); err != nil {
+		v.app.Logger.Warn("Процесс не завершился за отведённое время", "error", err)
 	}
+
+	// Выгружаем драйвер WinDivert и ждём освобождения файлов
+	v.updateStatus(statusLabel, "Освобождение ресурсов...")
+	v.unloadWinDivertDriver()
+	
+	// Даём больше времени на освобождение файлов драйвером
+	time.Sleep(3 * time.Second)
 
 	// Распаковываем архив
 	v.updateStatus(statusLabel, "Распаковка архива...")
@@ -229,23 +428,29 @@ func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updat
 	// Обновляем конфигурацию
 	v.updateStatus(statusLabel, "Обновление конфигурации...")
 	newAssetsPath := domain.AssetsPath(extractedPath)
-	if err := v.app.configManager.SetAssetsPath(newAssetsPath); err != nil {
+	if err := v.app.Services.Config.SetAssetsPath(newAssetsPath); err != nil {
 		v.showUpdateError(progressDialog, "ошибка обновления пути к ресурсам", err)
 		return
 	}
 
 	// Подготавливаем рабочую директорию
 	v.updateStatus(statusLabel, "Подготовка рабочей директории...")
-	if err := v.app.configManager.PrepareWorkingDirectory(); err != nil {
+	if err := v.app.Services.Config.PrepareWorkingDirectory(); err != nil {
 		v.showUpdateError(progressDialog, "ошибка подготовки рабочей директории", err)
 		return
 	}
 
+	// Обновляем список ipset
+	v.updateStatus(statusLabel, "Обновление списка IPset...")
+	workingDir := v.app.Services.Config.GetWorkingDir()
+	if _, err := v.app.Services.Update.UpdateIpsetList(newAssetsPath.String(), workingDir); err != nil {
+		// Не прерываем обновление из-за ошибки ipset, просто логируем
+		v.app.Logger.Warn("Не удалось обновить список ipset", "error", err)
+	}
+
 	// Перезагружаем стратегии
 	v.updateStatus(statusLabel, "Загрузка стратегий...")
-	fyne.Do(func() {
-		v.app.loadStrategies(newAssetsPath)
-	})
+	v.app.LoadStrategiesAndRefreshUI(newAssetsPath)
 
 	// Запускаем стратегию если была запущена
 	if state.wasRunning && state.lastStrategyName != "" {
@@ -260,8 +465,8 @@ func (v *HelpView) performUpdate(versionInfo *services.VersionInfo, state *updat
 }
 
 // extractArchive распаковывает архив
-func (v *HelpView) extractArchive(result *services.DownloadResult) (string, error) {
-	assetsPath := v.app.configManager.GetAssetsPath()
+func (v *HelpView) extractArchive(result *updates.DownloadResult) (string, error) {
+	assetsPath := v.app.Services.Config.GetAssetsPath()
 	parentDir := filepath.Dir(assetsPath.String())
 
 	versionDirName := strings.TrimSuffix(result.FileName, filepath.Ext(result.FileName))
@@ -280,18 +485,11 @@ func (v *HelpView) extractArchive(result *services.DownloadResult) (string, erro
 func (v *HelpView) restartStrategy(state *updateState, newAssetsPath domain.AssetsPath, statusLabel *widget.Label) error {
 	v.updateStatus(statusLabel, "Запуск стратегии...")
 
-	strategy, err := v.app.strategyService.GetByName(state.lastStrategyName)
+	// Статус обновится автоматически через EventBus
+	err := v.app.Services.StrategyController.StartStrategy(string(state.lastStrategyName), state.gameFilter)
 	if err != nil {
-		return fmt.Errorf("ошибка получения стратегии '%s': %w", state.lastStrategyName, err)
-	}
-
-	if err := v.app.processManager.StartStrategy(strategy, newAssetsPath, state.gameFilter); err != nil {
 		return fmt.Errorf("ошибка запуска стратегии '%s': %w", state.lastStrategyName, err)
 	}
-
-	fyne.Do(func() {
-		v.app.updateStatus()
-	})
 
 	return nil
 }
@@ -307,12 +505,12 @@ func (v *HelpView) updateStatus(statusLabel *widget.Label, message string) {
 func (v *HelpView) showUpdateError(progressDialog dialog.Dialog, context string, err error) {
 	fyne.Do(func() {
 		progressDialog.Hide()
-		dialog.ShowError(fmt.Errorf("%s:\n%w", context, err), v.app.window)
+		dialog.ShowError(fmt.Errorf("%s:\n%w", context, err), v.app.Window)
 	})
 }
 
 // showUpdateSuccess показывает успешное завершение обновления
-func (v *HelpView) showUpdateSuccess(progressDialog dialog.Dialog, versionInfo *services.VersionInfo, newAssetsPath domain.AssetsPath, state *updateState) {
+func (v *HelpView) showUpdateSuccess(progressDialog dialog.Dialog, versionInfo *updates.VersionInfo, newAssetsPath domain.AssetsPath, state *updateState) {
 	fyne.Do(func() {
 		progressDialog.Hide()
 
@@ -333,36 +531,36 @@ func (v *HelpView) showUpdateSuccess(progressDialog dialog.Dialog, versionInfo *
 Приложение готово к работе с новой версией.`, versionInfo.Latest, newAssetsPath)
 		}
 
-		dialog.ShowInformation("Обновление завершено", successMessage, v.app.window)
+		dialog.ShowInformation("Обновление завершено", successMessage, v.app.Window)
 	})
 }
 
 // downloadSeparately скачивает обновление в выбранную папку
-func (v *HelpView) downloadSeparately(versionInfo *services.VersionInfo) {
+func (v *HelpView) downloadSeparately(versionInfo *updates.VersionInfo) {
 	fileDialog := dialog.NewFolderOpen(func(uri fyne.ListableURI, err error) {
 		if err != nil || uri == nil {
 			return
 		}
 		v.performDownload(versionInfo, uri.Path())
-	}, v.app.window)
+	}, v.app.Window)
 
 	fileDialog.Resize(fyne.NewSize(800, 600))
 	fileDialog.Show()
 }
 
 // performDownload выполняет загрузку в указанную директорию
-func (v *HelpView) performDownload(versionInfo *services.VersionInfo, downloadPath string) {
+func (v *HelpView) performDownload(versionInfo *updates.VersionInfo, downloadPath string) {
 	progressDialog := v.createProgressDialog("Загрузка", "Загрузка обновления...")
 	progressDialog.Show()
 
 	go func() {
-		result, err := v.app.updateService.DownloadLatestRelease(versionInfo.Current, downloadPath)
+		result, err := v.app.Services.Update.DownloadLatestRelease(versionInfo.Current, downloadPath)
 
 		fyne.Do(func() {
 			progressDialog.Hide()
 
 			if err != nil {
-				dialog.ShowError(fmt.Errorf("ошибка загрузки обновления:\n%w", err), v.app.window)
+				dialog.ShowError(fmt.Errorf("ошибка загрузки обновления:\n%w", err), v.app.Window)
 				return
 			}
 
@@ -373,7 +571,7 @@ func (v *HelpView) performDownload(versionInfo *services.VersionInfo, downloadPa
 
 Распакуйте архив и используйте новую версию.`, result.FileName, result.FilePath)
 
-			dialog.ShowInformation("Загрузка завершена", successMessage, v.app.window)
+			dialog.ShowInformation("Загрузка завершена", successMessage, v.app.Window)
 		})
 	}()
 }
@@ -389,5 +587,88 @@ func (v *HelpView) createProgressDialog(title, message string) dialog.Dialog {
 		progressBar,
 	)
 
-	return dialog.NewCustomWithoutButtons(title, dialogContent, v.app.window)
+	return dialog.NewCustomWithoutButtons(title, dialogContent, v.app.Window)
+}
+
+// UpdateIpsetList обновляет список ipset из удалённого источника
+func (v *HelpView) UpdateIpsetList() {
+	progressDialog := v.createProgressDialog("Обновление IPset", "Загрузка списка IPset...")
+	progressDialog.Show()
+
+	go func() {
+		assetsPath := v.app.Services.Config.GetAssetsPath()
+		workingDir := v.app.Services.Config.GetWorkingDir()
+
+		result, err := v.app.Services.Update.UpdateIpsetList(assetsPath.String(), workingDir)
+
+		fyne.Do(func() {
+			progressDialog.Hide()
+
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("ошибка обновления списка IPset:\n%w", err), v.app.Window)
+				return
+			}
+
+			// Формируем итоговый ipset-all.txt с учётом текущего режима и пользовательских подсетей
+			mode, _ := v.app.State.IpsetMode.Get()
+			if mode == "" {
+				mode = "loaded"
+			}
+			if workingDir != "" {
+				v.app.Services.Ipset.UpdateIpsetFile(workingDir, mode)
+			}
+
+			// Перезапускаем стратегию если запущена
+			v.restartStrategyIfRunning()
+
+			var filesInfo string
+			if len(result.UpdatedFiles) > 0 {
+				filesInfo = fmt.Sprintf("\n\nОбновлено файлов: %d", len(result.UpdatedFiles))
+			}
+
+			dialog.ShowInformation("Обновление IPset",
+				fmt.Sprintf("Список IPset успешно обновлён!%s", filesInfo),
+				v.app.Window)
+		})
+	}()
+}
+
+// restartStrategyIfRunning перезапускает стратегию если она запущена.
+// Делегирует вызов App.RestartCurrentStrategy()
+func (v *HelpView) restartStrategyIfRunning() {
+	v.app.RestartCurrentStrategy()
+}
+
+// waitForProcessTermination ожидает завершения процесса winws
+func (v *HelpView) waitForProcessTermination(timeout time.Duration) error {
+	checkInterval := 200 * time.Millisecond
+	elapsed := time.Duration(0)
+	
+	for elapsed < timeout {
+		if !v.app.Services.Process.IsWinwsProcessRunning() {
+			return nil
+		}
+		time.Sleep(checkInterval)
+		elapsed += checkInterval
+	}
+	
+	// Ещё одна попытка принудительного завершения
+	_ = utils.RunHidden("taskkill", "/F", "/IM", "winws.exe")
+	time.Sleep(500 * time.Millisecond)
+	
+	if v.app.Services.Process.IsWinwsProcessRunning() {
+		return fmt.Errorf("процесс winws всё ещё запущен после %v", timeout)
+	}
+	return nil
+}
+
+// unloadWinDivertDriver пытается выгрузить драйвер WinDivert
+func (v *HelpView) unloadWinDivertDriver() {
+	// Пытаемся остановить службу WinDivert (если она запущена как служба)
+	_ = utils.RunHidden("sc", "stop", "WinDivert")
+	_ = utils.RunHidden("sc", "stop", "WinDivert14")
+
+	// Пытаемся выгрузить драйвер через pnputil (может потребовать прав администратора)
+	_ = utils.RunHidden("sc", "delete", "WinDivert")
+	_ = utils.RunHidden("sc", "delete", "WinDivert14")
 }

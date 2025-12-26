@@ -2,105 +2,11 @@ package utils
 
 import (
 	"archive/zip"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
-
-// CopyDir копирует директорию и всё её содержимое в другую директорию
-func CopyDir(src, dst string) error {
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	if !srcInfo.IsDir() {
-		return fmt.Errorf("source is not a directory: %s", src)
-	}
-
-	// Создаём целевую директорию
-	err = os.MkdirAll(dst, srcInfo.Mode())
-	if err != nil {
-		return err
-	}
-
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			err = CopyDir(srcPath, dstPath)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = CopyFile(srcPath, dstPath)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// CopyFile копирует файл из одного места в другое
-func CopyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(srcFile, dstFile)
-	if err != nil {
-		return err
-	}
-
-	// Копируем права доступа
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	return os.Chmod(dst, srcInfo.Mode())
-}
-
-// RemoveAllContents удаляет всё содержимое директории, оставляя саму директорию
-func RemoveAllContents(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-
-	names, err := d.Readdirnames(-1)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		err = os.RemoveAll(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
 
 // ExtractZip распаковывает ZIP-архив в указанную директорию и возвращает путь к извлеченным файлам
 func ExtractZip(archivePath, extractDir string) (string, error) {
@@ -161,19 +67,3 @@ func ExtractZip(archivePath, extractDir string) (string, error) {
 	return filepath.Join(extractDir, rootDir), nil
 }
 
-// GetSubdirectories возвращает список поддиректорий в указанной директории
-func GetSubdirectories(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var subdirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			subdirs = append(subdirs, entry.Name())
-		}
-	}
-
-	return subdirs, nil
-}
