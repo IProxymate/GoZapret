@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/IProxymate/GoZapret/internal/domain"
 )
 
 // FileManager управляет файлами ipset
@@ -150,7 +152,7 @@ func (f *FileManager) loadCustomSubnets(workingDir string) []string {
 		return nil
 	}
 
-	customIpsetPath := filepath.Join(configDir, "GoZapret", "hosts", "ipset-custom.txt")
+	customIpsetPath := filepath.Join(configDir, domain.AppName, domain.HostsDirName, domain.IpsetCustomFile)
 
 	// Проверяем существование файла
 	if _, err := os.Stat(customIpsetPath); os.IsNotExist(err) {

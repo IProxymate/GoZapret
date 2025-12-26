@@ -53,3 +53,5 @@ type MonitorResult struct {
 	MissingIPSets []string        `json:"missing_ipsets"` // Подсети, которые нужно добавить
 }
 
+
+

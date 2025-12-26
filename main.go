@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/IProxymate/GoZapret/internal/app"
+	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/logger"
 	"github.com/IProxymate/GoZapret/internal/ui"
 	"github.com/IProxymate/GoZapret/internal/utils"
@@ -31,10 +33,10 @@ func main() {
 	// Устанавливаем как глобальный логгер
 	slog.SetDefault(log)
 
-	log.Debug("Запуск приложения GoZapret")
+	log.Debug("Запуск приложения", "app", domain.AppName)
 
 	// Создаем менеджер единственного экземпляра
-	singleInstance := utils.NewSingleInstance("GoZapret")
+	singleInstance := utils.NewSingleInstance(domain.AppName)
 	singleInstance.SetLogger(log)
 
 	// Пытаемся захватить мьютекс
@@ -56,8 +58,13 @@ func main() {
 	// Освобождаем мьютекс при завершении
 	defer singleInstance.Release()
 
-	// Создаем приложение с передачей singleInstance
-	app := ui.NewApp(Assets, log, singleInstance)
+	// Создаем приложение
+	application := app.NewApp(Assets, log, singleInstance)
 
-	app.Run()
+	// Регистрируем фабрику MainView из пакета ui
+	application.SetMainViewFactory(func(a *app.App) app.MainViewInterface {
+		return ui.NewMainView(a)
+	})
+
+	application.Run()
 }

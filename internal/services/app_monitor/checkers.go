@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/IProxymate/GoZapret/internal/domain"
 )
 
 // IpsetChecker проверяет IP адреса на вхождение в ipset
@@ -93,7 +95,7 @@ func (c *DomainChecker) loadFromFiles(workingDir string) {
 	// Загружаем пользовательские домены
 	configDir, _ := os.UserConfigDir()
 	if configDir != "" {
-		extraPath := filepath.Join(configDir, "GoZapret", "hosts", "extra-hosts.txt")
+		extraPath := filepath.Join(configDir, domain.AppName, domain.HostsDirName, "extra-hosts.txt")
 		c.loadDomainsFromFile(extraPath)
 	}
 }

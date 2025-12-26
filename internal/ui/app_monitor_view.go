@@ -5,19 +5,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/IProxymate/GoZapret/internal/app"
+	"github.com/IProxymate/GoZapret/internal/services/app_monitor"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-
-	"github.com/IProxymate/GoZapret/internal/services/app_monitor"
 )
 
 // AppMonitorView представление для мониторинга сетевой активности приложений
 type AppMonitorView struct {
-	app            *App
+	app            *app.App
 	monitorService *app_monitor.Service
 	monitorWindow  fyne.Window
 
@@ -36,10 +37,10 @@ type AppMonitorView struct {
 }
 
 // NewAppMonitorView создает новое представление мониторинга
-func NewAppMonitorView(app *App) *AppMonitorView {
-	workingDir := app.configManager.GetWorkingDir()
+func NewAppMonitorView(a *app.App) *AppMonitorView {
+	workingDir := a.Services.Config.GetWorkingDir()
 	return &AppMonitorView{
-		app:            app,
+		app:            a,
 		monitorService: app_monitor.NewService(workingDir),
 		requests:       make([]*app_monitor.NetworkRequest, 0),
 	}
@@ -47,7 +48,7 @@ func NewAppMonitorView(app *App) *AppMonitorView {
 
 // Show отображает окно мониторинга
 func (v *AppMonitorView) Show() {
-	v.monitorWindow = v.app.fyneApp.NewWindow("Мониторинг сетевой активности")
+	v.monitorWindow = v.app.FyneApp.NewWindow("Мониторинг сетевой активности")
 	v.monitorWindow.Resize(fyne.NewSize(950, 700))
 	v.monitorWindow.CenterOnScreen()
 
@@ -390,31 +391,28 @@ func (v *AppMonitorView) updateStatus() {
 	startTime := time.Now()
 	processFound := false
 
-	for {
-		select {
-		case <-ticker.C:
-			if !v.monitorService.IsMonitoring() {
-				return
-			}
-			elapsed := time.Since(startTime).Round(time.Second)
-			requestCount := len(v.requests)
-
-			fyne.Do(func() {
-				if requestCount > 0 {
-					processFound = true
-					v.statusLabel.SetText(fmt.Sprintf("🔍 Мониторинг %s", elapsed.String()))
-				} else if !processFound {
-					v.statusLabel.SetText(fmt.Sprintf("⏳ Ожидание %s — запустите игру!", elapsed.String()))
-				} else {
-					v.statusLabel.SetText(fmt.Sprintf("🔍 Мониторинг %s", elapsed.String()))
-				}
-			})
+	for range ticker.C {
+		if !v.monitorService.IsMonitoring() {
+			return
 		}
+		elapsed := time.Since(startTime).Round(time.Second)
+		requestCount := len(v.requests)
+
+		fyne.Do(func() {
+			if requestCount > 0 {
+				processFound = true
+				v.statusLabel.SetText(fmt.Sprintf("🔍 Мониторинг %s", elapsed.String()))
+			} else if !processFound {
+				v.statusLabel.SetText(fmt.Sprintf("⏳ Ожидание %s — запустите игру!", elapsed.String()))
+			} else {
+				v.statusLabel.SetText(fmt.Sprintf("🔍 Мониторинг %s", elapsed.String()))
+			}
+		})
 	}
 }
 
-// copyMissingSubnets копирует недостающие подсети в буфер обмена
-func (v *AppMonitorView) copyMissingSubnets() {
+// getMissingSubnets возвращает список подсетей, отсутствующих в ipset
+func (v *AppMonitorView) getMissingSubnets() []string {
 	missing := make(map[string]bool)
 	for _, req := range v.requests {
 		if !req.InIpset && req.Subnet != "" {
@@ -422,14 +420,19 @@ func (v *AppMonitorView) copyMissingSubnets() {
 		}
 	}
 
-	if len(missing) == 0 {
-		dialog.ShowInformation("Информация", "Все подсети уже есть в IPset!", v.monitorWindow)
-		return
-	}
-
-	var subnets []string
+	subnets := make([]string, 0, len(missing))
 	for subnet := range missing {
 		subnets = append(subnets, subnet)
+	}
+	return subnets
+}
+
+// copyMissingSubnets копирует недостающие подсети в буфер обмена
+func (v *AppMonitorView) copyMissingSubnets() {
+	subnets := v.getMissingSubnets()
+	if len(subnets) == 0 {
+		dialog.ShowInformation("Информация", "Все подсети уже есть в IPset!", v.monitorWindow)
+		return
 	}
 
 	text := strings.Join(subnets, "\n")
@@ -442,21 +445,10 @@ func (v *AppMonitorView) copyMissingSubnets() {
 
 // addMissingToIpset добавляет недостающие подсети в ipset
 func (v *AppMonitorView) addMissingToIpset() {
-	missing := make(map[string]bool)
-	for _, req := range v.requests {
-		if !req.InIpset && req.Subnet != "" {
-			missing[req.Subnet] = true
-		}
-	}
-
-	if len(missing) == 0 {
+	subnets := v.getMissingSubnets()
+	if len(subnets) == 0 {
 		dialog.ShowInformation("Информация", "Все подсети уже есть в IPset!", v.monitorWindow)
 		return
-	}
-
-	var subnets []string
-	for subnet := range missing {
-		subnets = append(subnets, subnet)
 	}
 
 	dialog.ShowConfirm("Добавить подсети",
@@ -472,7 +464,7 @@ func (v *AppMonitorView) addMissingToIpset() {
 
 // doAddToIpset выполняет добавление подсетей в ipset
 func (v *AppMonitorView) doAddToIpset(subnets []string) {
-	customIpsetPath := v.app.configManager.GetCustomIpsetPath()
+	customIpsetPath := v.app.Services.Config.GetCustomIpsetPath()
 
 	// Открываем окно редактирования ipset
 	ipsetListView := NewIpsetListView(v.app, customIpsetPath, "Пользовательские подсети (IPset)")
@@ -483,43 +475,3 @@ func (v *AppMonitorView) doAddToIpset(subnets []string) {
 		v.monitorWindow)
 }
 
-// proportionalLayout распределяет элементы пропорционально
-type proportionalLayout struct {
-	proportions []float32
-}
-
-func (p *proportionalLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	height := float32(30)
-	for _, obj := range objects {
-		if obj.MinSize().Height > height {
-			height = obj.MinSize().Height
-		}
-	}
-	return fyne.NewSize(400, height)
-}
-
-func (p *proportionalLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	if len(objects) == 0 {
-		return
-	}
-
-	// Вычисляем сумму пропорций
-	var totalProportion float32
-	for i := 0; i < len(objects) && i < len(p.proportions); i++ {
-		totalProportion += p.proportions[i]
-	}
-
-	// Распределяем ширину
-	x := float32(0)
-	for i, obj := range objects {
-		proportion := float32(1)
-		if i < len(p.proportions) {
-			proportion = p.proportions[i]
-		}
-
-		width := (proportion / totalProportion) * size.Width
-		obj.Resize(fyne.NewSize(width, size.Height))
-		obj.Move(fyne.NewPos(x, 0))
-		x += width
-	}
-}

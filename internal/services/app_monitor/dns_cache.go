@@ -105,3 +105,5 @@ func (d *DNSCache) Add(ip, hostname string) {
 	d.cache[ip] = hostname
 }
 
+
+

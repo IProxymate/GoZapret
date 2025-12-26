@@ -5,25 +5,26 @@ import (
 	"os"
 	"strings"
 
+	"github.com/IProxymate/GoZapret/internal/app"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"github.com/IProxymate/GoZapret/internal/domain"
 )
 
 // DomainListView представляет окно редактирования списка доменов
 type DomainListView struct {
-	app      *App
+	app      *app.App
 	filePath string
 	title    string
 	window   fyne.Window
 }
 
 // NewDomainListView создает новое окно редактирования списка доменов
-func NewDomainListView(app *App, filePath, title string) *DomainListView {
+func NewDomainListView(a *app.App, filePath, title string) *DomainListView {
 	return &DomainListView{
-		app:      app,
+		app:      a,
 		filePath: filePath,
 		title:    title,
 	}
@@ -31,7 +32,7 @@ func NewDomainListView(app *App, filePath, title string) *DomainListView {
 
 // Show показывает окно редактирования
 func (v *DomainListView) Show() {
-	v.window = v.app.fyneApp.NewWindow(v.title)
+	v.window = v.app.FyneApp.NewWindow(v.title)
 	v.window.Resize(fyne.NewSize(600, 500))
 	v.window.CenterOnScreen()
 
@@ -45,7 +46,7 @@ func (v *DomainListView) buildContent() fyne.CanvasObject {
 	// Загружаем текущее содержимое файла
 	domains, err := v.loadDomains()
 	if err != nil {
-		v.app.logger.Error("Ошибка загрузки списка доменов", "file", v.filePath, "error", err)
+		v.app.Logger.Error("Ошибка загрузки списка доменов", "file", v.filePath, "error", err)
 		domains = ""
 	}
 
@@ -154,51 +155,10 @@ func (v *DomainListView) saveDomains(text string) {
 	v.window.Close()
 }
 
-// restartStrategyIfRunning перезапускает стратегию, если процесс запущен
+// restartStrategyIfRunning перезапускает стратегию, если процесс запущен.
+// Делегирует вызов App.RestartCurrentStrategy()
 func (v *DomainListView) restartStrategyIfRunning() {
-	// Проверяем, запущен ли процесс
-	if !v.app.processManager.IsRunning() && !v.app.processManager.IsWinwsProcessRunning() {
-		v.app.logger.Debug("Процесс не запущен, перезапуск не требуется")
-		return
-	}
-
-	// Получаем текущую стратегию
-	strategyName, _ := v.app.selectedStrategy.Get()
-	if strategyName == "" {
-		v.app.logger.Warn("Не удалось получить текущую стратегию для перезапуска")
-		return
-	}
-
-	strategy, err := v.app.strategyService.GetByName(domain.StrategyName(strategyName))
-	if err != nil {
-		v.app.logger.Error("Ошибка получения стратегии для перезапуска", "strategy", strategyName, "error", err)
-		return
-	}
-
-	assetsPath := v.app.configManager.GetAssetsPath()
-	if assetsPath == "" {
-		v.app.logger.Warn("Путь к ресурсам не установлен, перезапуск невозможен")
-		return
-	}
-
-	// Получаем текущее состояние GameFilter
-	gameFilter, _ := v.app.gameFilter.Get()
-
-	// Перезапускаем стратегию в фоне
-	go func() {
-		v.app.logger.Info("Перезапуск стратегии после изменения списков доменов", "strategy", strategyName)
-		err := v.app.processManager.RestartStrategy(strategy, assetsPath, gameFilter)
-		if err != nil {
-			v.app.logger.Error("Ошибка перезапуска стратегии", "error", err)
-			fyne.Do(func() {
-				dialog.ShowError(fmt.Errorf("ошибка перезапуска стратегии: %v", err), v.app.window)
-			})
-		} else {
-			v.app.logger.Info("Стратегия успешно перезапущена", "strategy", strategyName)
-		}
-		// Обновляем статус после перезапуска
-		v.app.updateStatus()
-	}()
+	v.app.RestartCurrentStrategy()
 }
 
 // validateDomains проверяет корректность доменов

@@ -13,7 +13,6 @@ type Monitor interface {
 	Start(processPath string) error
 	Stop() *MonitorResult
 	IsRunning() bool
-	GetCurrentRequests() []*NetworkRequest
 	OnRequest(callback func(*NetworkRequest))
 }
 
@@ -82,11 +81,6 @@ func (s *Service) IsMonitoring() bool {
 	return s.monitor.IsRunning()
 }
 
-// GetCurrentRequests возвращает текущие запросы
-func (s *Service) GetCurrentRequests() []*NetworkRequest {
-	return s.monitor.GetCurrentRequests()
-}
-
 // OnRequest добавляет callback для обработки новых запросов
 func (s *Service) OnRequest(callback func(*NetworkRequest)) {
 	s.monitor.OnRequest(callback)
@@ -97,21 +91,6 @@ func (s *Service) RefreshCheckers() {
 	s.ipsetChecker = NewIpsetChecker(s.workingDir)
 	s.domainChecker = NewDomainChecker(s.workingDir)
 	s.monitor = NewConnectionMonitor(s.ipsetChecker, s.domainChecker)
-}
-
-// GetMissingSubnets возвращает подсети, которые нужно добавить в ipset
-func (s *Service) GetMissingSubnets(result *MonitorResult) []string {
-	if result == nil {
-		return nil
-	}
-
-	missing := make([]string, 0)
-	for _, stats := range result.IPStatistics {
-		if !stats.InIpset && stats.Count > 0 {
-			missing = append(missing, stats.Subnet)
-		}
-	}
-	return missing
 }
 
 // FormatResultAsText форматирует результат мониторинга в текст

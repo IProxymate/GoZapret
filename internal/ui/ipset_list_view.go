@@ -6,25 +6,26 @@ import (
 	"os"
 	"strings"
 
+	"github.com/IProxymate/GoZapret/internal/app"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"github.com/IProxymate/GoZapret/internal/domain"
 )
 
 // IpsetListView представляет окно редактирования списка подсетей
 type IpsetListView struct {
-	app      *App
+	app      *app.App
 	filePath string
 	title    string
 	window   fyne.Window
 }
 
 // NewIpsetListView создает новое окно редактирования списка подсетей
-func NewIpsetListView(app *App, filePath, title string) *IpsetListView {
+func NewIpsetListView(a *app.App, filePath, title string) *IpsetListView {
 	return &IpsetListView{
-		app:      app,
+		app:      a,
 		filePath: filePath,
 		title:    title,
 	}
@@ -32,7 +33,7 @@ func NewIpsetListView(app *App, filePath, title string) *IpsetListView {
 
 // Show показывает окно редактирования
 func (v *IpsetListView) Show() {
-	v.window = v.app.fyneApp.NewWindow(v.title)
+	v.window = v.app.FyneApp.NewWindow(v.title)
 	v.window.Resize(fyne.NewSize(600, 500))
 	v.window.CenterOnScreen()
 
@@ -46,7 +47,7 @@ func (v *IpsetListView) buildContent() fyne.CanvasObject {
 	// Загружаем текущее содержимое файла
 	subnets, err := v.loadSubnets()
 	if err != nil {
-		v.app.logger.Error("Ошибка загрузки списка подсетей", "file", v.filePath, "error", err)
+		v.app.Logger.Error("Ошибка загрузки списка подсетей", "file", v.filePath, "error", err)
 		subnets = ""
 	}
 
@@ -169,65 +170,24 @@ func (v *IpsetListView) saveSubnets(text string) {
 
 // updateIpsetFile обновляет файл ipset-all.txt с учетом пользовательских подсетей
 func (v *IpsetListView) updateIpsetFile() {
-	workingDir := v.app.configManager.GetWorkingDir()
+	workingDir := v.app.Services.Config.GetWorkingDir()
 	if workingDir == "" {
 		return
 	}
 
-	mode, _ := v.app.ipsetMode.Get()
+	mode, _ := v.app.State.IpsetMode.Get()
 	if mode == "" {
 		mode = "loaded"
 	}
 
 	// Обновляем ipset файл через сервис
-	v.app.ipsetService.UpdateIpsetFile(workingDir, mode)
+	v.app.Services.Ipset.UpdateIpsetFile(workingDir, mode)
 }
 
-// restartStrategyIfRunning перезапускает стратегию, если процесс запущен
+// restartStrategyIfRunning перезапускает стратегию, если процесс запущен.
+// Делегирует вызов App.RestartCurrentStrategy()
 func (v *IpsetListView) restartStrategyIfRunning() {
-	// Проверяем, запущен ли процесс
-	if !v.app.processManager.IsRunning() && !v.app.processManager.IsWinwsProcessRunning() {
-		v.app.logger.Debug("Процесс не запущен, перезапуск не требуется")
-		return
-	}
-
-	// Получаем текущую стратегию
-	strategyName, _ := v.app.selectedStrategy.Get()
-	if strategyName == "" {
-		v.app.logger.Warn("Не удалось получить текущую стратегию для перезапуска")
-		return
-	}
-
-	strategy, err := v.app.strategyService.GetByName(domain.StrategyName(strategyName))
-	if err != nil {
-		v.app.logger.Error("Ошибка получения стратегии для перезапуска", "strategy", strategyName, "error", err)
-		return
-	}
-
-	assetsPath := v.app.configManager.GetAssetsPath()
-	if assetsPath == "" {
-		v.app.logger.Warn("Путь к ресурсам не установлен, перезапуск невозможен")
-		return
-	}
-
-	// Получаем текущее состояние GameFilter
-	gameFilter, _ := v.app.gameFilter.Get()
-
-	// Перезапускаем стратегию в фоне
-	go func() {
-		v.app.logger.Info("Перезапуск стратегии после изменения списка подсетей", "strategy", strategyName)
-		err := v.app.processManager.RestartStrategy(strategy, assetsPath, gameFilter)
-		if err != nil {
-			v.app.logger.Error("Ошибка перезапуска стратегии", "error", err)
-			fyne.Do(func() {
-				dialog.ShowError(fmt.Errorf("ошибка перезапуска стратегии: %v", err), v.app.window)
-			})
-		} else {
-			v.app.logger.Info("Стратегия успешно перезапущена", "strategy", strategyName)
-		}
-		// Обновляем статус после перезапуска
-		v.app.updateStatus()
-	}()
+	v.app.RestartCurrentStrategy()
 }
 
 // validateSubnets проверяет корректность подсетей

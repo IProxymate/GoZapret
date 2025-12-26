@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/IProxymate/GoZapret/internal/domain"
+
 	"golang.org/x/sys/windows/registry"
 )
 
 const autostartKey = `Software\Microsoft\Windows\CurrentVersion\Run`
-const autostartValueName = "GoZapret"
+
+var autostartValueName = domain.AppName
 
 // RegistryManager управляет записями автозапуска в реестре Windows (legacy)
 type RegistryManager struct{}

@@ -3,26 +3,25 @@ package ui
 import (
 	"fmt"
 
+	"github.com/IProxymate/GoZapret/internal/app"
+	"github.com/IProxymate/GoZapret/internal/services/domain_check"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-
-	"github.com/IProxymate/GoZapret/internal/services/domain_check"
 )
 
 // DomainCheckView представление для проверки доменов
 type DomainCheckView struct {
-	app           fyne.App
-	window        fyne.Window
+	app           *app.App
 	domainChecker *domain_check.Checker
 }
 
 // NewDomainCheckView создает новое представление для проверки доменов
-func NewDomainCheckView(app fyne.App, window fyne.Window) *DomainCheckView {
+func NewDomainCheckView(a *app.App) *DomainCheckView {
 	return &DomainCheckView{
-		app:           app,
-		window:        window,
+		app:           a,
 		domainChecker: domain_check.NewCheckerWithDefaults(),
 	}
 }
@@ -30,7 +29,7 @@ func NewDomainCheckView(app fyne.App, window fyne.Window) *DomainCheckView {
 // Show отображает окно проверки домена
 func (v *DomainCheckView) Show() {
 	// Создаем окно
-	checkWindow := v.app.NewWindow("Проверить домен")
+	checkWindow := v.app.FyneApp.NewWindow("Проверить домен")
 	checkWindow.Resize(fyne.NewSize(700, 500))
 	checkWindow.CenterOnScreen()
 

@@ -166,276 +166,62 @@ func (c *TCPTimestampsCheck) Check() *domain.DiagnosticResult {
 	return result
 }
 
-// AdguardCheck проверяет наличие Adguard сервиса
-type AdguardCheck struct{}
-
-func NewAdguardCheck() *AdguardCheck {
-	return &AdguardCheck{}
+// NewAdguardCheck создаёт проверку Adguard сервиса (через процесс)
+func NewAdguardCheck() *ProcessCheck {
+	return NewProcessCheck(
+		"Проверка наличия Adguard сервиса",
+		"AdguardSvc.exe",
+		"Adguard сервис не найден",
+		"Найден процесс AdguardSvc.exe",
+	)
 }
 
-func (c *AdguardCheck) Name() string {
-	return "Проверка наличия Adguard сервиса"
+// NewKillerServicesCheck создаёт проверку Killer сервисов
+func NewKillerServicesCheck() *ServiceCheck {
+	return NewServiceCheck(ServiceCheckConfig{
+		Name:           "Проверка наличия конфликтующих Killer сервисов",
+		SearchPatterns: []string{"killer"},
+		SuccessMessage: "Killer сервисы не найдены",
+		ErrorMessage:   "Найдены сервисы, конфликтующие с zapret",
+	})
 }
 
-func (c *AdguardCheck) Check() *domain.DiagnosticResult {
-	start := time.Now()
-	output, err := utils.OutputHidden("tasklist", "/FI", "IMAGENAME eq AdguardSvc.exe")
-
-	result := &domain.DiagnosticResult{
-		Name:      c.Name(),
-		Timestamp: time.Now(),
-		Duration:  time.Since(start),
-		Details:   make(map[string]interface{}),
-	}
-
-	if err != nil || !strings.Contains(string(output), "AdguardSvc.exe") {
-		result.Success = true
-		result.Message = "OK"
-		result.Details["result"] = "Adguard сервис не найден"
-		if err != nil {
-			result.Details["error"] = err.Error()
-		} else {
-			result.Details["output"] = string(output)
-		}
-		return result
-	}
-
-	result.Success = false
-	result.Message = "ERROR"
-	result.Details["result"] = "Найден процесс AdguardSvc.exe"
-	result.Details["output"] = string(output)
-
-	return result
+// NewIntelConnectivityCheck создаёт проверку Intel Connectivity сервиса
+func NewIntelConnectivityCheck() *MultiPatternServiceCheck {
+	return NewMultiPatternServiceCheck(
+		"Проверка наличия конфликтующего Intel сервиса",
+		[]string{"intel", "connectivity", "network"},
+		"Intel сервисы не найдены",
+		"Найден сервис, конфликтующий с zapret",
+	)
 }
 
-// KillerServicesCheck проверяет наличие конфликтующих Killer сервисов
-type KillerServicesCheck struct{}
-
-func NewKillerServicesCheck() *KillerServicesCheck {
-	return &KillerServicesCheck{}
+// NewCheckPointCheck создаёт проверку Check Point сервисов
+func NewCheckPointCheck() *ServiceCheck {
+	return NewServiceCheck(ServiceCheckConfig{
+		Name:           "Проверка наличия сервисов Check Point",
+		SearchPatterns: []string{"tracsrvwrapper", "epwd"},
+		SuccessMessage: "Сервисы Check Point не найдены",
+		ErrorMessage:   "Найдены сервисы, конфликтующие с zapret",
+	})
 }
 
-func (c *KillerServicesCheck) Name() string {
-	return "Проверка наличия конфликтующих Killer сервисов"
+// NewSmartByteCheck создаёт проверку SmartByte сервисов
+func NewSmartByteCheck() *ServiceCheck {
+	return NewServiceCheck(ServiceCheckConfig{
+		Name:           "Проверка наличия сервисов SmartByte",
+		SearchPatterns: []string{"smartbyte"},
+		SuccessMessage: "Сервисы SmartByte не найдены",
+		ErrorMessage:   "Найдены сервисы, конфликтующие с zapret",
+	})
 }
 
-func (c *KillerServicesCheck) Check() *domain.DiagnosticResult {
-	start := time.Now()
-	output, err := utils.OutputHidden("sc", "query")
-
-	result := &domain.DiagnosticResult{
-		Name:      c.Name(),
-		Timestamp: time.Now(),
-		Duration:  time.Since(start),
-		Details:   make(map[string]interface{}),
-	}
-
-	if err != nil {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Не удалось выполнить команду sc query"
-		result.Details["error"] = err.Error()
-		return result
-	}
-
-	if strings.Contains(strings.ToLower(string(output)), "killer") {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Найдены сервисы, конфликтующие с zapret"
-		result.Details["output"] = string(output)
-		return result
-	}
-
-	result.Success = true
-	result.Message = "OK"
-	result.Details["result"] = "Killer сервисы не найдены"
-
-	return result
-}
-
-// IntelConnectivityCheck проверяет наличие конфликтующего Intel сервиса
-type IntelConnectivityCheck struct{}
-
-func NewIntelConnectivityCheck() *IntelConnectivityCheck {
-	return &IntelConnectivityCheck{}
-}
-
-func (c *IntelConnectivityCheck) Name() string {
-	return "Проверка наличия конфликтующего Intel сервиса"
-}
-
-func (c *IntelConnectivityCheck) Check() *domain.DiagnosticResult {
-	start := time.Now()
-	output, err := utils.OutputHidden("sc", "query")
-
-	result := &domain.DiagnosticResult{
-		Name:      c.Name(),
-		Timestamp: time.Now(),
-		Duration:  time.Since(start),
-		Details:   make(map[string]interface{}),
-	}
-
-	if err != nil {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Не удалось выполнить команду sc query"
-		result.Details["error"] = err.Error()
-		return result
-	}
-
-	outputLower := strings.ToLower(string(output))
-	if strings.Contains(outputLower, "intel") &&
-		strings.Contains(outputLower, "connectivity") &&
-		strings.Contains(outputLower, "network") {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Найден сервис, конфликтующий с zapret"
-		result.Details["output"] = string(output)
-		return result
-	}
-
-	result.Success = true
-	result.Message = "OK"
-	result.Details["result"] = "Intel сервисы не найдены"
-
-	return result
-}
-
-// CheckPointCheck проверяет наличие сервисов Check Point
-type CheckPointCheck struct{}
-
-func NewCheckPointCheck() *CheckPointCheck {
-	return &CheckPointCheck{}
-}
-
-func (c *CheckPointCheck) Name() string {
-	return "Проверка наличия сервисов Check Point"
-}
-
-func (c *CheckPointCheck) Check() *domain.DiagnosticResult {
-	start := time.Now()
-	output, err := utils.OutputHidden("sc", "query")
-
-	result := &domain.DiagnosticResult{
-		Name:      c.Name(),
-		Timestamp: time.Now(),
-		Duration:  time.Since(start),
-		Details:   make(map[string]interface{}),
-	}
-
-	if err != nil {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Не удалось выполнить команду sc query"
-		result.Details["error"] = err.Error()
-		return result
-	}
-
-	outputLower := strings.ToLower(string(output))
-	checkpointFound := strings.Contains(outputLower, "tracsrvwrapper") ||
-		strings.Contains(outputLower, "epwd")
-
-	if checkpointFound {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Найдены сервисы, конфликтующие с zapret"
-		result.Details["output"] = string(output)
-		return result
-	}
-
-	result.Success = true
-	result.Message = "OK"
-	result.Details["result"] = "Сервисы Check Point не найдены"
-
-	return result
-}
-
-// SmartByteCheck проверяет наличие сервисов SmartByte
-type SmartByteCheck struct{}
-
-func NewSmartByteCheck() *SmartByteCheck {
-	return &SmartByteCheck{}
-}
-
-func (c *SmartByteCheck) Name() string {
-	return "Проверка наличия сервисов SmartByte"
-}
-
-func (c *SmartByteCheck) Check() *domain.DiagnosticResult {
-	start := time.Now()
-	output, err := utils.OutputHidden("sc", "query")
-
-	result := &domain.DiagnosticResult{
-		Name:      c.Name(),
-		Timestamp: time.Now(),
-		Duration:  time.Since(start),
-		Details:   make(map[string]interface{}),
-	}
-
-	if err != nil {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Не удалось выполнить команду sc query"
-		result.Details["error"] = err.Error()
-		return result
-	}
-
-	if strings.Contains(strings.ToLower(string(output)), "smartbyte") {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Найдены сервисы, конфликтующие с zapret"
-		result.Details["output"] = string(output)
-		return result
-	}
-
-	result.Success = true
-	result.Message = "OK"
-	result.Details["result"] = "Сервисы SmartByte не найдены"
-
-	return result
-}
-
-// VPNServicesCheck проверяет наличие VPN сервисов
-type VPNServicesCheck struct{}
-
-func NewVPNServicesCheck() *VPNServicesCheck {
-	return &VPNServicesCheck{}
-}
-
-func (c *VPNServicesCheck) Name() string {
-	return "Проверка наличия VPN сервисов"
-}
-
-func (c *VPNServicesCheck) Check() *domain.DiagnosticResult {
-	start := time.Now()
-	output, err := utils.OutputHidden("sc", "query")
-
-	result := &domain.DiagnosticResult{
-		Name:      c.Name(),
-		Timestamp: time.Now(),
-		Duration:  time.Since(start),
-		Details:   make(map[string]interface{}),
-	}
-
-	if err != nil {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Не удалось выполнить команду sc query"
-		result.Details["error"] = err.Error()
-		return result
-	}
-
-	if strings.Contains(strings.ToLower(string(output)), "vpn") {
-		result.Success = false
-		result.Message = "ERROR"
-		result.Details["result"] = "Найдены сервисы, возможен конфликт"
-		result.Details["output"] = string(output)
-		return result
-	}
-
-	result.Success = true
-	result.Message = "OK"
-	result.Details["result"] = "VPN сервисы не найдены"
-
-	return result
+// NewVPNServicesCheck создаёт проверку VPN сервисов
+func NewVPNServicesCheck() *ServiceCheck {
+	return NewServiceCheck(ServiceCheckConfig{
+		Name:           "Проверка наличия VPN сервисов",
+		SearchPatterns: []string{"vpn"},
+		SuccessMessage: "VPN сервисы не найдены",
+		ErrorMessage:   "Найдены сервисы, возможен конфликт",
+	})
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/Microsoft/go-winio"
 )
 
@@ -109,7 +110,7 @@ func (si *SingleInstance) StartIPCServer() error {
 		OutputBufferSize:   1024,
 	}
 
-	listener, err := winio.ListenPipe(PIPE_NAME, pipeConfig)
+	listener, err := winio.ListenPipe(domain.PipeName, pipeConfig)
 	if err != nil {
 		si.logger.Error("Не удалось создать Named Pipe сервер", "pipe", PIPE_NAME, "error", err)
 		return fmt.Errorf("не удалось создать Named Pipe сервер: %w", err)
@@ -117,7 +118,7 @@ func (si *SingleInstance) StartIPCServer() error {
 
 	si.pipeListener = listener
 	si.stopChan = make(chan struct{})
-	si.logger.Info("IPC сервер запущен", "pipe", PIPE_NAME)
+	si.logger.Info("IPC сервер запущен", "pipe", domain.PipeName)
 
 	// Запускаем горутину для обработки входящих соединений
 	go si.handleConnections()
@@ -201,17 +202,17 @@ func (si *SingleInstance) SendActivateCommand() error {
 	var err error
 
 	for i := 0; i < 10; i++ {
-		conn, err = winio.DialPipe(PIPE_NAME, nil)
+		conn, err = winio.DialPipe(domain.PipeName, nil)
 		if err == nil {
 			break
 		}
 
-		si.logger.Debug("Попытка подключения к Named Pipe", "attempt", i+1, "pipe", PIPE_NAME, "error", err)
+		si.logger.Debug("Попытка подключения к Named Pipe", "attempt", i+1, "pipe", domain.PipeName, "error", err)
 		time.Sleep(200 * time.Millisecond)
 	}
 
 	if err != nil {
-		si.logger.Error("Не удалось подключиться к Named Pipe", "pipe", PIPE_NAME, "error", err)
+		si.logger.Error("Не удалось подключиться к Named Pipe", "pipe", domain.PipeName, "error", err)
 		return fmt.Errorf("не удалось подключиться к Named Pipe: %w", err)
 	}
 	defer conn.Close()

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/IProxymate/GoZapret/internal/domain"
+
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -40,7 +42,7 @@ func DefaultConfig() *Config {
 	if err != nil {
 		configDir = "."
 	}
-	logPath := filepath.Join(configDir, "GoZapret", "logs", "app.log")
+	logPath := filepath.Join(configDir, domain.AppName, domain.LogsDirName, domain.AppLogFile)
 
 	return &Config{
 		Level:      "debug",
@@ -81,7 +83,7 @@ func LoadConfig(path string) (*Config, error) {
 		if err != nil {
 			configDir = "."
 		}
-		cfg.FilePath = filepath.Join(configDir, "GoZapret", "logs", "app.log")
+		cfg.FilePath = filepath.Join(configDir, domain.AppName, domain.LogsDirName, domain.AppLogFile)
 	}
 
 	return &cfg, nil
