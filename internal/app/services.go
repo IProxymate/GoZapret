@@ -98,7 +98,7 @@ func NewServices(logger *slog.Logger, version string) *Services {
 		Ipset:       ipset.NewService(),
 		Cache:       services.NewCacheService(),
 		Autostart:   autostart.NewService(),
-		Update:      updates.NewService("https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest"),
+		Update:      updates.NewService(config.GetExternalConfig().ZapretResourcesAPIURL()),
 		SelfUpdate:  updates.NewSelfUpdater(version),
 
 		StrategyController: strategyController,

@@ -12,17 +12,12 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/fynelabs/fyneselfupdate"
 	"github.com/fynelabs/selfupdate"
 )
 
-const (
-	// GoZapretGitHubRepo - репозиторий GoZapret на GitHub
-	GoZapretGitHubRepo = "IProxymate/GoZapret"
-	// GoZapretReleasesURL - URL для загрузки релизов
-	// Файл в релизе называется просто GoZapret.exe
-	GoZapretReleasesURL = "https://github.com/" + GoZapretGitHubRepo + "/releases/download/v{{.Version}}/GoZapret{{.Ext}}"
-)
+var extCfg = config.GetExternalConfig()
 
 // SelfUpdater управляет обновлениями самого приложения GoZapret
 type SelfUpdater struct {
@@ -51,7 +46,7 @@ func (s *SelfUpdater) SetupWithFyne(app fyne.App, window fyne.Window) error {
 
 	// Создаём HTTP источник для загрузки обновлений
 	// {{.Version}}, {{.OS}}, {{.Arch}}, {{.Ext}} будут заменены автоматически
-	httpSource := selfupdate.NewHTTPSource(s.httpClient, GoZapretReleasesURL)
+	httpSource := selfupdate.NewHTTPSource(s.httpClient, extCfg.GoZapretReleasesURL())
 
 	// Создаём конфигурацию без автоматической проверки
 	// Проверка будет только по нажатию кнопки
@@ -76,7 +71,7 @@ func (s *SelfUpdater) SetupWithFyne(app fyne.App, window fyne.Window) error {
 		"version", s.currentVersion,
 		"os", runtime.GOOS,
 		"arch", runtime.GOARCH,
-		"url", GoZapretReleasesURL)
+		"url", extCfg.GoZapretReleasesURL())
 
 	return nil
 }
@@ -116,7 +111,7 @@ func (s *SelfUpdater) CheckForUpdatesManual(onUpdateAvailable func(newVersion st
 		slog.Debug("Начинаем ручную проверку обновлений")
 
 		// Получаем информацию о последней версии через GitHub API
-		client := NewGitHubClient(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", GoZapretGitHubRepo))
+		client := NewGitHubClient(extCfg.GoZapretAPIURL())
 		release, err := client.GetLatestRelease()
 		if err != nil {
 			slog.Error("Ошибка получения информации о релизе", "error", err)
@@ -168,8 +163,7 @@ func (s *SelfUpdater) PerformUpdateAsync(latestVersion string, onProgress func(s
 		})
 
 		// Формируем URL для скачивания
-		downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/v%s/GoZapret.exe",
-			GoZapretGitHubRepo, latestVersion)
+		downloadURL := extCfg.DownloadURL(latestVersion)
 
 		slog.Debug("URL для скачивания", "url", downloadURL)
 

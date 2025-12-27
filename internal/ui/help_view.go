@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/IProxymate/GoZapret/internal/app"
+	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/services/updates"
 	"github.com/IProxymate/GoZapret/internal/utils"
@@ -19,9 +20,11 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+var extCfg = config.GetExternalConfig()
+
 // NewGitHubClientForSelfUpdate создаёт клиент GitHub для проверки обновлений GoZapret
 func NewGitHubClientForSelfUpdate() *updates.GitHubClient {
-	return updates.NewGitHubClient(fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", updates.GoZapretGitHubRepo))
+	return updates.NewGitHubClient(extCfg.GoZapretAPIURL())
 }
 
 // HelpView представляет функционал меню помощи
@@ -86,10 +89,10 @@ func (v *HelpView) ShowAbout() {
 	featuresCard := widget.NewCard("Возможности", "", featuresLabel)
 
 	// Ссылки
-	repoLink := widget.NewHyperlink("GitHub: zapret-discord-youtube", parseURL("https://github.com/Flowseal/zapret-discord-youtube"))
-	guiRepoLink := widget.NewHyperlink("GitHub: GoZapret (GUI)", parseURL("https://github.com/IProxymate/GoZapret"))
-	issuesLink := widget.NewHyperlink("Сообщить о проблеме", parseURL("https://github.com/IProxymate/GoZapret/issues"))
-	originalLink := widget.NewHyperlink("Оригинальный zapret (bol-van)", parseURL("https://github.com/bol-van/zapret"))
+	repoLink := widget.NewHyperlink("GitHub: zapret-discord-youtube", parseURL(extCfg.ZapretResourcesGitHubURL()))
+	guiRepoLink := widget.NewHyperlink("GitHub: GoZapret (GUI)", parseURL(extCfg.GoZapretGitHubURL()))
+	issuesLink := widget.NewHyperlink("Сообщить о проблеме", parseURL(extCfg.GoZapretIssuesURL()))
+	originalLink := widget.NewHyperlink("Оригинальный zapret (bol-van)", parseURL(extCfg.OriginalZapretGitHubURL()))
 
 	linksCard := widget.NewCard("Ссылки", "", container.NewVBox(
 		guiRepoLink,
