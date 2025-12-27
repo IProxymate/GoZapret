@@ -53,7 +53,7 @@ type App struct {
 func NewApp(assets embed.FS, logger *slog.Logger, singleInstance *utils.SingleInstance, version string) *App {
 	fyneApp := fyneapp.NewWithID(domain.AppID)
 
-	// Создаем контейнер сервисов
+	// Создаем контейнер сервисов (версия передаётся через ldflags)
 	services := NewServices(logger, version)
 
 	// Создаем состояние UI
