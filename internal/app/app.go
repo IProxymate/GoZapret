@@ -50,11 +50,11 @@ type App struct {
 }
 
 // NewApp создает новое приложение
-func NewApp(assets embed.FS, logger *slog.Logger, singleInstance *utils.SingleInstance) *App {
+func NewApp(assets embed.FS, logger *slog.Logger, singleInstance *utils.SingleInstance, version string) *App {
 	fyneApp := fyneapp.NewWithID(domain.AppID)
 
 	// Создаем контейнер сервисов
-	services := NewServices(logger)
+	services := NewServices(logger, version)
 
 	// Создаем состояние UI
 	state := NewState()

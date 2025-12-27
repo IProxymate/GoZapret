@@ -1,0 +1,116 @@
+# Taskfile для сборки GoZapret
+# Использование: task release VERSION=1.0.4
+#
+# Требования:
+# - Установлен go-task: https://taskfile.dev/installation/
+# - Установлен go-winres: go install github.com/tc-hib/go-winres@latest
+
+version: '3'
+
+vars:
+  APP_NAME: GoZapret
+  OUTPUT_DIR: ./release
+  WINRES_FILE: ./winres/winres.json
+
+tasks:
+  default:
+    desc: Показать список доступных задач
+    cmds:
+      - task --list
+
+  clean:
+    desc: Очистить артефакты сборки
+    cmds:
+      - cmd: powershell -Command "if (Test-Path '{{.OUTPUT_DIR}}') { Remove-Item -Recurse -Force '{{.OUTPUT_DIR}}' }"
+        platforms: [windows]
+      - cmd: rm -rf {{.OUTPUT_DIR}}
+        platforms: [linux, darwin]
+      - cmd: powershell -Command "Get-ChildItem -Filter '*.syso' -ErrorAction SilentlyContinue | Remove-Item -Force"
+        platforms: [windows]
+      - cmd: rm -f *.syso
+        platforms: [linux, darwin]
+    silent: true
+
+  update-winres:
+    desc: Обновить версию в winres.json
+    requires:
+      vars: [VERSION]
+    vars:
+      V: '{{.VERSION}}.0'
+    cmds:
+      - cmd: powershell -NoProfile -ExecutionPolicy Bypass -File - <<< "\$f='{{.WINRES_FILE}}'; \$v='{{.V}}'; \$j=Get-Content \$f -Raw | ConvertFrom-Json; \$j.RT_MANIFEST.'#1'.'0409'.identity.version=\$v; \$j.RT_VERSION.'#1'.'0000'.fixed.file_version=\$v; \$j.RT_VERSION.'#1'.'0000'.fixed.product_version=\$v; \$j.RT_VERSION.'#1'.'0000'.info.'0409'.FileVersion=\$v; \$j.RT_VERSION.'#1'.'0000'.info.'0409'.ProductVersion=\$v; \$j | ConvertTo-Json -Depth 10 | Set-Content \$f; Write-Host Updated to \$v"
+        platforms: [windows]
+
+  winres:
+    desc: Сгенерировать Windows ресурсы (.syso)
+    env:
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      - go-winres make
+    generates:
+      - rsrc_windows_amd64.syso
+
+  build:
+    desc: Собрать приложение для Windows amd64
+    deps: [clean, update-winres, winres]
+    requires:
+      vars: [VERSION]
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: '1'
+    cmds:
+      - cmd: powershell -Command "New-Item -ItemType Directory -Path '{{.OUTPUT_DIR}}' -Force | Out-Null"
+        platforms: [windows]
+      - cmd: mkdir -p {{.OUTPUT_DIR}}
+        platforms: [linux, darwin]
+      - go build -ldflags "-s -w -H=windowsgui -X main.version={{.VERSION}}" -o {{.OUTPUT_DIR}}/{{.APP_NAME}}.exe .
+    generates:
+      - '{{.OUTPUT_DIR}}/{{.APP_NAME}}.exe'
+
+  release:
+    desc: Полная сборка релиза (task release VERSION=x.x.x)
+    requires:
+      vars: [VERSION]
+    cmds:
+      - task: build
+        vars:
+          VERSION: '{{.VERSION}}'
+      - 'echo === Сборка завершена ==='
+      - 'echo   -> {{.OUTPUT_DIR}}/{{.APP_NAME}}.exe'
+      - 'echo === Публикация на GitHub ==='
+      - 'echo 1. https://github.com/IProxymate/GoZapret/releases/new'
+      - 'echo 2. Тег: v{{.VERSION}}'
+      - 'echo 3. Название: GoZapret v{{.VERSION}}'
+      - 'echo 4. Загрузите: {{.OUTPUT_DIR}}/{{.APP_NAME}}.exe'
+
+  dev:
+    desc: Сборка для разработки (версия=dev)
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: '1'
+    cmds:
+      - go build -ldflags "-X main.version=dev" -o {{.APP_NAME}}.exe .
+
+  run:
+    desc: Запустить приложение (для разработки)
+    deps: [dev]
+    cmds:
+      - ./{{.APP_NAME}}.exe
+
+  test:
+    desc: Запустить тесты
+    cmds:
+      - go test ./...
+
+  lint:
+    desc: Запустить линтер
+    cmds:
+      - golangci-lint run ./...
+
+  tidy:
+    desc: Привести в порядок зависимости
+    cmds:
+      - go mod tidy
