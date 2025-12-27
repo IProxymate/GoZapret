@@ -15,15 +15,17 @@ type Manager struct {
 	configPath string
 	config     *domain.Config
 	workspace  *WorkspaceManager
+	version    string // версия приложения, передаётся при сборке
 }
 
 // NewManager создает новый менеджер конфигурации
-func NewManager(configPath string) *Manager {
+func NewManager(configPath string, version string) *Manager {
 	configDir := filepath.Dir(configPath)
 	return &Manager{
 		configPath: configPath,
 		config:     &domain.Config{},
 		workspace:  NewWorkspaceManager(configDir),
+		version:    version,
 	}
 }
 
@@ -47,6 +49,9 @@ func (m *Manager) Load() error {
 		return err
 	}
 
+	// Всегда обновляем версию из билда (после обновления приложения)
+	m.config.Version = m.version
+
 	slog.Debug("Конфигурация успешно загружена")
 	return m.config.Validate()
 }
@@ -60,7 +65,7 @@ func (m *Manager) defaultConfig() *domain.Config {
 		AutoStart:        domain.DefaultAutoStart,
 		GameFilter:       domain.DefaultGameFilter,
 		IpsetMode:        domain.DefaultIpsetMode.String(),
-		Version:          domain.DefaultVersion,
+		Version:          m.version,
 		UpdatedAt:        time.Now(),
 		WorkingDir:       "",
 	}

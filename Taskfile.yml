@@ -1,0 +1,107 @@
+# Taskfile для сборки GoZapret
+# Использование: task release VERSION=1.0.4
+#
+# Требования:
+# - Установлен go-task: https://taskfile.dev/installation/
+# - Установлен go-winres: go install github.com/tc-hib/go-winres@latest
+
+version: '3'
+
+vars:
+  APP_NAME: GoZapret
+  OUTPUT_DIR: ./release
+
+tasks:
+  default:
+    desc: Показать список доступных задач
+    cmds:
+      - task --list
+
+  clean:
+    desc: Очистить артефакты сборки
+    cmds:
+      - cmd: powershell -Command "if (Test-Path '{{.OUTPUT_DIR}}') { Remove-Item -Recurse -Force '{{.OUTPUT_DIR}}' }"
+        platforms: [windows]
+      - cmd: rm -rf {{.OUTPUT_DIR}}
+        platforms: [linux, darwin]
+      - cmd: powershell -Command "Get-ChildItem -Filter '*.syso' -ErrorAction SilentlyContinue | Remove-Item -Force"
+        platforms: [windows]
+      - cmd: rm -f *.syso
+        platforms: [linux, darwin]
+    silent: true
+
+  winres:
+    desc: Сгенерировать Windows ресурсы (.syso) с admin манифестом
+    env:
+      GOOS: windows
+      GOARCH: amd64
+    cmds:
+      - go-winres make
+
+  build:
+    desc: Собрать приложение для Windows (task build VERSION=x.x.x)
+    requires:
+      vars: [VERSION]
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: '1'
+    cmds:
+      # Очистка
+      - cmd: 'powershell -Command "Remove-Item -Path ''{{.OUTPUT_DIR}}'' -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path ''*.syso'' -Force -ErrorAction SilentlyContinue"'
+        platforms: [windows]
+      - cmd: rm -rf {{.OUTPUT_DIR}} *.syso
+        platforms: [linux, darwin]
+      # Генерация .syso с admin манифестом и иконками
+      - go-winres make
+      # Создание директории
+      - cmd: powershell -Command "New-Item -ItemType Directory -Path '{{.OUTPUT_DIR}}' -Force | Out-Null"
+        platforms: [windows]
+      - cmd: mkdir -p {{.OUTPUT_DIR}}
+        platforms: [linux, darwin]
+      # Сборка с go build (использует .syso с admin манифестом)
+      - cmd: 'powershell -NoProfile -Command "go build -ldflags \"-s -w -H=windowsgui -X main.version={{.VERSION}}\" -o {{.OUTPUT_DIR}}/{{.APP_NAME}}.exe ."'
+        platforms: [windows]
+      - cmd: go build -ldflags "-s -w -H=windowsgui -X main.version={{.VERSION}}" -o {{.OUTPUT_DIR}}/{{.APP_NAME}}.exe .
+        platforms: [linux, darwin]
+    generates:
+      - '{{.OUTPUT_DIR}}/{{.APP_NAME}}.exe'
+
+  release:
+    desc: Полная сборка релиза (task release VERSION=x.x.x)
+    requires:
+      vars: [VERSION]
+    cmds:
+      - task: build
+        vars:
+          VERSION: '{{.VERSION}}'
+
+  dev:
+    desc: Сборка для разработки (версия=dev)
+    env:
+      GOOS: windows
+      GOARCH: amd64
+      CGO_ENABLED: '1'
+    cmds:
+      - go build -ldflags "-X main.version=dev" -o {{.APP_NAME}}.exe .
+
+  run:
+    desc: Запустить приложение (для разработки)
+    deps: [dev]
+    cmds:
+      - ./{{.APP_NAME}}.exe
+
+  test:
+    desc: Запустить тесты
+    cmds:
+      - go test ./...
+
+  lint:
+    desc: Запустить линтер
+    cmds:
+      - golangci-lint run ./...
+
+  tidy:
+    desc: Привести в порядок зависимости
+    cmds:
+      - go mod tidy

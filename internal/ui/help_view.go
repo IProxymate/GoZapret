@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/IProxymate/GoZapret/internal/app"
+	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/services/updates"
 	"github.com/IProxymate/GoZapret/internal/utils"
@@ -18,6 +19,13 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
+
+var extCfg = config.GetExternalConfig()
+
+// NewGitHubClientForSelfUpdate создаёт клиент GitHub для проверки обновлений GoZapret
+func NewGitHubClientForSelfUpdate() *updates.GitHubClient {
+	return updates.NewGitHubClient(extCfg.GoZapretAPIURL())
+}
 
 // HelpView представляет функционал меню помощи
 type HelpView struct {
@@ -81,10 +89,10 @@ func (v *HelpView) ShowAbout() {
 	featuresCard := widget.NewCard("Возможности", "", featuresLabel)
 
 	// Ссылки
-	repoLink := widget.NewHyperlink("GitHub: zapret-discord-youtube", parseURL("https://github.com/Flowseal/zapret-discord-youtube"))
-	guiRepoLink := widget.NewHyperlink("GitHub: GoZapret (GUI)", parseURL("https://github.com/IProxymate/GoZapret"))
-	issuesLink := widget.NewHyperlink("Сообщить о проблеме", parseURL("https://github.com/IProxymate/GoZapret/issues"))
-	originalLink := widget.NewHyperlink("Оригинальный zapret (bol-van)", parseURL("https://github.com/bol-van/zapret"))
+	repoLink := widget.NewHyperlink("GitHub: zapret-discord-youtube", parseURL(extCfg.ZapretResourcesGitHubURL()))
+	guiRepoLink := widget.NewHyperlink("GitHub: GoZapret (GUI)", parseURL(extCfg.GoZapretGitHubURL()))
+	issuesLink := widget.NewHyperlink("Сообщить о проблеме", parseURL(extCfg.GoZapretIssuesURL()))
+	originalLink := widget.NewHyperlink("Оригинальный zapret (bol-van)", parseURL(extCfg.OriginalZapretGitHubURL()))
 
 	linksCard := widget.NewCard("Ссылки", "", container.NewVBox(
 		guiRepoLink,
@@ -145,6 +153,188 @@ func (v *HelpView) truncatePath(path string, maxLen int) string {
 func parseURL(urlStr string) *url.URL {
 	u, _ := url.Parse(urlStr)
 	return u
+}
+
+// updateCheckResult хранит результат проверки обновления
+type updateCheckResult struct {
+	name        string
+	hasUpdate   bool
+	currentVer  string
+	latestVer   string
+	err         error
+	updateFunc  func() // функция для выполнения обновления
+}
+
+// CheckAllUpdates проверяет все типы обновлений и показывает результат
+func (v *HelpView) CheckAllUpdates() {
+	progressDialog := v.createProgressDialog("Проверка обновлений", "Проверка всех обновлений...")
+	progressDialog.Show()
+
+	go func() {
+		results := make([]*updateCheckResult, 3)
+		done := make(chan int, 3)
+
+		// Проверяем обновление приложения GoZapret
+		go func() {
+			result := &updateCheckResult{name: "GoZapret"}
+			client := NewGitHubClientForSelfUpdate()
+			release, err := client.GetLatestRelease()
+			if err != nil {
+				result.err = err
+			} else {
+				currentVersion := v.app.Services.SelfUpdate.GetCurrentVersion()
+				latestVersion := strings.TrimPrefix(release.TagName, "v")
+				result.currentVer = currentVersion
+				result.latestVer = latestVersion
+				result.hasUpdate = latestVersion > currentVersion && latestVersion != currentVersion
+				if result.hasUpdate {
+					result.updateFunc = func() {
+						v.showAppUpdateDialog(latestVersion)
+					}
+				}
+			}
+			results[0] = result
+			done <- 0
+		}()
+
+		// Проверяем обновление ресурсов zapret
+		go func() {
+			result := &updateCheckResult{name: "Ресурсы zapret"}
+			versionInfo, err := v.checkVersion()
+			if err != nil {
+				result.err = err
+			} else {
+				result.currentVer = versionInfo.Current
+				result.latestVer = versionInfo.Latest
+				result.hasUpdate = versionInfo.IsNewer
+				if result.hasUpdate {
+					result.updateFunc = func() {
+						v.showUpdateDialog(versionInfo)
+					}
+				}
+			}
+			results[1] = result
+			done <- 1
+		}()
+
+		// IPset всегда можно обновить (нет проверки версии)
+		go func() {
+			result := &updateCheckResult{
+				name:       "Список IPset",
+				hasUpdate:  true, // Всегда доступно для обновления
+				currentVer: "—",
+				latestVer:  "Доступно",
+				updateFunc: func() {
+					v.UpdateIpsetList()
+				},
+			}
+			results[2] = result
+			done <- 2
+		}()
+
+		// Ждём завершения всех проверок
+		for i := 0; i < 3; i++ {
+			<-done
+		}
+
+		fyne.Do(func() {
+			progressDialog.Hide()
+			v.showAllUpdatesResult(results)
+		})
+	}()
+}
+
+// showAllUpdatesResult показывает результаты проверки всех обновлений
+func (v *HelpView) showAllUpdatesResult(results []*updateCheckResult) {
+	// Создаём окно с результатами
+	updatesWindow := v.app.FyneApp.NewWindow("Обновления")
+	updatesWindow.Resize(fyne.NewSize(500, 400))
+	updatesWindow.CenterOnScreen()
+
+	// Заголовок
+	titleLabel := widget.NewLabelWithStyle("Результаты проверки обновлений", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+
+	// Контейнер для карточек
+	cardsContainer := container.NewVBox()
+
+	hasAnyUpdate := false
+	for _, result := range results {
+		if result == nil {
+			continue
+		}
+
+		var statusText string
+		var statusIcon string
+		var button *widget.Button
+
+		if result.err != nil {
+			statusIcon = "❌"
+			statusText = fmt.Sprintf("Ошибка: %v", result.err)
+		} else if result.hasUpdate {
+			hasAnyUpdate = true
+			statusIcon = "🔄"
+			if result.name == "Список IPset" {
+				statusText = "Можно обновить"
+			} else {
+				statusText = fmt.Sprintf("%s → %s", result.currentVer, result.latestVer)
+			}
+			updateFunc := result.updateFunc
+			button = widget.NewButton("Обновить", func() {
+				updatesWindow.Hide()
+				if updateFunc != nil {
+					updateFunc()
+				}
+			})
+			button.Importance = widget.HighImportance
+		} else {
+			statusIcon = "✅"
+			statusText = fmt.Sprintf("Актуальная версия: %s", result.currentVer)
+		}
+
+		// Создаём строку с информацией
+		nameLabel := widget.NewLabelWithStyle(fmt.Sprintf("%s %s", statusIcon, result.name), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		statusLabel := widget.NewLabel(statusText)
+
+		var cardContent fyne.CanvasObject
+		if button != nil {
+			cardContent = container.NewBorder(nil, nil, nil, button,
+				container.NewVBox(nameLabel, statusLabel))
+		} else {
+			cardContent = container.NewVBox(nameLabel, statusLabel)
+		}
+
+		card := widget.NewCard("", "", cardContent)
+		cardsContainer.Add(card)
+	}
+
+	// Итоговое сообщение
+	var summaryText string
+	if hasAnyUpdate {
+		summaryText = "Доступны обновления. Нажмите кнопку для установки."
+	} else {
+		summaryText = "Все компоненты актуальны."
+	}
+	summaryLabel := widget.NewLabel(summaryText)
+	summaryLabel.Alignment = fyne.TextAlignCenter
+
+	// Кнопка закрытия
+	closeButton := widget.NewButton("Закрыть", func() {
+		updatesWindow.Close()
+	})
+
+	// Компоновка
+	content := container.NewVBox(
+		titleLabel,
+		widget.NewSeparator(),
+		cardsContainer,
+		widget.NewSeparator(),
+		summaryLabel,
+		closeButton,
+	)
+
+	scroll := container.NewScroll(content)
+	updatesWindow.SetContent(container.NewPadded(scroll))
+	updatesWindow.Show()
 }
 
 // CheckForUpdates проверяет наличие обновлений ресурсов zapret

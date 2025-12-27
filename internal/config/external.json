@@ -1,0 +1,22 @@
+{
+  "repositories": {
+    "gozapret": "IProxymate/GoZapret",
+    "zapret_resources": "Flowseal/zapret-discord-youtube",
+    "original_zapret": "bol-van/zapret"
+  },
+  "urls": {
+    "ipset_list": "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt"
+  },
+  "check_domains": [
+    {"name": "Discord Main", "url": "https://discord.com", "ping": "discord.com"},
+    {"name": "Discord Gateway", "url": "https://gateway.discord.gg", "ping": "gateway.discord.gg"},
+    {"name": "Discord CDN", "url": "https://cdn.discordapp.com", "ping": "cdn.discordapp.com"},
+    {"name": "Discord Updates", "url": "https://updates.discord.com", "ping": "updates.discord.com"},
+    {"name": "YouTube Web", "url": "https://www.youtube.com", "ping": "www.youtube.com"},
+    {"name": "YouTube Short", "url": "https://youtu.be", "ping": "youtu.be"},
+    {"name": "YouTube Image", "url": "https://i.ytimg.com", "ping": "i.ytimg.com"},
+    {"name": "Google Main", "url": "https://www.google.com", "ping": "www.google.com"},
+    {"name": "Cloudflare Web", "url": "https://www.cloudflare.com", "ping": "www.cloudflare.com"}
+  ]
+}
+

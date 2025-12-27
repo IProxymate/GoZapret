@@ -40,12 +40,12 @@ type Services struct {
 }
 
 // NewServices создает и инициализирует все сервисы приложения
-func NewServices(logger *slog.Logger) *Services {
+func NewServices(logger *slog.Logger, version string) *Services {
 	// Создаём шину событий
 	eventBus := NewEventBus()
 
 	// Инициализируем менеджер конфигурации
-	configManager := initConfigManager(logger)
+	configManager := initConfigManager(logger, version)
 
 	// Создаем базовые сервисы
 	adminChecker := services.NewAdminChecker()
@@ -98,22 +98,22 @@ func NewServices(logger *slog.Logger) *Services {
 		Ipset:       ipset.NewService(),
 		Cache:       services.NewCacheService(),
 		Autostart:   autostart.NewService(),
-		Update:      updates.NewService("https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest"),
-		SelfUpdate:  updates.NewSelfUpdater(domain.DefaultVersion),
+		Update:      updates.NewService(config.GetExternalConfig().ZapretResourcesAPIURL()),
+		SelfUpdate:  updates.NewSelfUpdater(version),
 
 		StrategyController: strategyController,
 	}
 }
 
 // initConfigManager инициализирует менеджер конфигурации
-func initConfigManager(logger *slog.Logger) *config.Manager {
+func initConfigManager(logger *slog.Logger, version string) *config.Manager {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		configDir = "."
 	}
 	configPath := filepath.Join(configDir, domain.AppName, domain.ConfigFileName)
 
-	configManager := config.NewManager(configPath)
+	configManager := config.NewManager(configPath, version)
 	if err := configManager.Load(); err != nil {
 		logger.Error("Ошибка загрузки конфигурации", "error", err)
 	}

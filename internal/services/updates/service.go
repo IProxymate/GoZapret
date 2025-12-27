@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/IProxymate/GoZapret/internal/config"
 )
 
 // VersionInfo содержит информацию о версии
@@ -195,7 +197,7 @@ type IpsetUpdateResult struct {
 
 // UpdateIpsetList обновляет список ipset из удалённого источника
 func (s *Service) UpdateIpsetList(assetsPath string, workingDir string) (*IpsetUpdateResult, error) {
-	const ipsetURL = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt"
+	ipsetURL := config.GetExternalConfig().IpsetListURL()
 
 	slog.Debug("Обновление списка ipset", "url", ipsetURL)
 

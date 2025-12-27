@@ -12,6 +12,10 @@ import (
 	"github.com/IProxymate/GoZapret/internal/utils"
 )
 
+// Версия приложения, устанавливается при сборке через ldflags:
+// go build -ldflags "-X main.version=1.0.4"
+var version = "dev"
+
 //go:embed assets/*
 var Assets embed.FS
 
@@ -59,7 +63,7 @@ func main() {
 	defer singleInstance.Release()
 
 	// Создаем приложение
-	application := app.NewApp(Assets, log, singleInstance)
+	application := app.NewApp(Assets, log, singleInstance, version)
 
 	// Регистрируем фабрику MainView из пакета ui
 	application.SetMainViewFactory(func(a *app.App) app.MainViewInterface {

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/IProxymate/GoZapret/internal/config"
 	"github.com/IProxymate/GoZapret/internal/utils"
 )
 
@@ -71,21 +72,26 @@ func NewMultiChecker() *MultiChecker {
 	}
 }
 
-// GetDefaultTargets возвращает список целей по умолчанию (как в service.bat)
+// GetDefaultTargets возвращает список целей по умолчанию из конфигурации
 func GetDefaultTargets() []Target {
-	return []Target{
-		{Name: "Discord Main", URL: "https://discord.com", PingTarget: "discord.com"},
-		{Name: "Discord Gateway", URL: "https://gateway.discord.gg", PingTarget: "gateway.discord.gg"},
-		{Name: "Discord CDN", URL: "https://cdn.discordapp.com", PingTarget: "cdn.discordapp.com"},
-		{Name: "Discord Updates", URL: "https://updates.discord.com", PingTarget: "updates.discord.com"},
-		{Name: "YouTube Web", URL: "https://www.youtube.com", PingTarget: "www.youtube.com"},
-		{Name: "YouTube Short", URL: "https://youtu.be", PingTarget: "youtu.be"},
-		{Name: "YouTube Image", URL: "https://i.ytimg.com", PingTarget: "i.ytimg.com"},
-		{Name: "Google Main", URL: "https://www.google.com", PingTarget: "www.google.com"},
-		{Name: "Cloudflare Web", URL: "https://www.cloudflare.com", PingTarget: "www.cloudflare.com"},
-		{Name: "Cloudflare DNS", URL: "", PingTarget: "1.1.1.1"},
-		{Name: "Google DNS", URL: "", PingTarget: "8.8.8.8"},
+	extCfg := config.GetExternalConfig()
+	targets := make([]Target, 0, len(extCfg.CheckDomains)+2)
+
+	for _, d := range extCfg.CheckDomains {
+		targets = append(targets, Target{
+			Name:       d.Name,
+			URL:        d.URL,
+			PingTarget: d.Ping,
+		})
 	}
+
+	// Добавляем DNS-серверы (только ping, без URL)
+	targets = append(targets,
+		Target{Name: "Cloudflare DNS", URL: "", PingTarget: "1.1.1.1"},
+		Target{Name: "Google DNS", URL: "", PingTarget: "8.8.8.8"},
+	)
+
+	return targets
 }
 
 // CheckAll проверяет все цели параллельно
