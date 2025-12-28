@@ -248,7 +248,7 @@ func (v *HelpView) CheckAllUpdates() {
 func (v *HelpView) showAllUpdatesResult(results []*updateCheckResult) {
 	// Создаём окно с результатами
 	updatesWindow := v.app.FyneApp.NewWindow("Обновления")
-	updatesWindow.Resize(fyne.NewSize(500, 400))
+	updatesWindow.Resize(fyne.NewSize(600, 500))
 	updatesWindow.CenterOnScreen()
 
 	// Заголовок

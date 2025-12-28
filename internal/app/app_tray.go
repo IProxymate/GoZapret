@@ -21,7 +21,7 @@ func (a *App) setupTray(icon []byte) {
 	menu := fyne.NewMenu(domain.AppName,
 		fyne.NewMenuItem("Показать", func() {
 			a.Window.Show()
-			a.Window.Resize(fyne.NewSize(800, 600))
+			a.Window.Resize(fyne.NewSize(900, 650))
 			a.Window.CenterOnScreen()
 			a.Window.RequestFocus()
 		}),

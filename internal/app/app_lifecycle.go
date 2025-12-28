@@ -70,7 +70,7 @@ func (a *App) runInAutostartMode() {
 func (a *App) runInNormalMode() {
 	a.UpdateStatus()
 	a.AppStarted = true
-	a.Window.Resize(fyne.NewSize(800, 600))
+	a.Window.Resize(fyne.NewSize(900, 650))
 	a.Window.CenterOnScreen()
 	a.Window.ShowAndRun()
 }
