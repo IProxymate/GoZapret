@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -21,17 +22,33 @@ type GitHubRelease struct {
 
 // GitHubClient работает с GitHub API
 type GitHubClient struct {
-	apiURL string
-	client *http.Client
+	apiURL         string
+	client         *http.Client
+	insecureClient *http.Client // клиент без проверки TLS для обхода корпоративных прокси
 }
 
 // NewGitHubClient создает новый GitHub клиент
 func NewGitHubClient(apiURL string) *GitHubClient {
-	return &GitHubClient{
-		apiURL: apiURL,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
+	// Стандартный клиент с проверкой TLS
+	normalClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Клиент без проверки TLS (для корпоративных прокси с MITM)
+	insecureTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
 		},
+	}
+	insecureClient := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: insecureTransport,
+	}
+
+	return &GitHubClient{
+		apiURL:         apiURL,
+		client:         normalClient,
+		insecureClient: insecureClient,
 	}
 }
 
@@ -39,10 +56,17 @@ func NewGitHubClient(apiURL string) *GitHubClient {
 func (g *GitHubClient) GetLatestRelease() (*GitHubRelease, error) {
 	slog.Debug("Запрос последнего релиза", "api_url", g.apiURL)
 
+	// Сначала пробуем с обычным клиентом
 	resp, err := g.client.Get(g.apiURL)
 	if err != nil {
-		slog.Error("Ошибка при запросе к GitHub API", "error", err)
-		return nil, fmt.Errorf("ошибка при запросе к GitHub API: %w", err)
+		// Если ошибка связана с TLS/сертификатами, пробуем без проверки
+		slog.Warn("Ошибка при запросе с проверкой TLS, пробуем без проверки", "error", err)
+		resp, err = g.insecureClient.Get(g.apiURL)
+		if err != nil {
+			slog.Error("Ошибка при запросе к GitHub API", "error", err)
+			return nil, fmt.Errorf("ошибка при запросе к GitHub API: %w", err)
+		}
+		slog.Debug("Запрос успешен без проверки TLS (возможно корпоративный прокси)")
 	}
 	defer resp.Body.Close()
 

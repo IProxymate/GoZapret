@@ -287,12 +287,45 @@ func (m *Manager) getWorkingBinDir() string {
 	return filepath.Join(workingDir, "bin")
 }
 
+// isSystemShutdownError проверяет, является ли ошибка результатом системного завершения
+// (выход из системы, перезагрузка, спящий режим)
+func (m *Manager) isSystemShutdownError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	// 0x40010004 - STATUS_THREAD_IS_TERMINATING (системное завершение сессии)
+	// 0xC000013A - STATUS_CONTROL_C_EXIT (Ctrl+C или SIGTERM)
+	// exit status 1 при корректном завершении через taskkill
+	systemExitCodes := []string{
+		"exit status 0x40010004",
+		"exit status 0xc000013a",
+		"exit status 1073807364", // десятичное значение 0x40010004
+	}
+
+	for _, code := range systemExitCodes {
+		if errStr == code {
+			return true
+		}
+	}
+
+	return false
+}
+
 // monitorProcess мониторит процесс в отдельной горутине
 func (m *Manager) monitorProcess(result *StartResult) {
 	err := result.Cmd.Wait()
 
 	if m.currentProcess != nil {
 		if err != nil {
+			// Проверяем, является ли это системным завершением (не ошибкой)
+			if m.isSystemShutdownError(err) {
+				slog.Debug("Процесс winws завершён системой (выход из системы/перезагрузка/спящий режим)", "exit_code", err.Error())
+				m.currentProcess.Status = domain.ProcessStatusStopped
+				return
+			}
+
 			m.currentProcess.Status = domain.ProcessStatusFailed
 
 			// Получаем вывод stderr

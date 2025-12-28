@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,6 +24,7 @@ var extCfg = config.GetExternalConfig()
 type SelfUpdater struct {
 	currentVersion string
 	httpClient     *http.Client
+	insecureClient *http.Client // клиент без проверки TLS для обхода корпоративных прокси
 	app            fyne.App
 	window         fyne.Window
 	config         *selfupdate.Config
@@ -30,11 +32,26 @@ type SelfUpdater struct {
 
 // NewSelfUpdater создаёт новый сервис самообновления
 func NewSelfUpdater(currentVersion string) *SelfUpdater {
+	// Стандартный клиент с проверкой TLS
+	normalClient := &http.Client{
+		Timeout: 60 * time.Second,
+	}
+
+	// Клиент без проверки TLS (для корпоративных прокси с MITM)
+	insecureTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	insecureClient := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: insecureTransport,
+	}
+
 	return &SelfUpdater{
 		currentVersion: strings.TrimPrefix(currentVersion, "v"),
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
-		},
+		httpClient:     normalClient,
+		insecureClient: insecureClient,
 	}
 }
 
@@ -167,14 +184,19 @@ func (s *SelfUpdater) PerformUpdateAsync(latestVersion string, onProgress func(s
 
 		slog.Debug("URL для скачивания", "url", downloadURL)
 
-		// Скачиваем новую версию
+		// Скачиваем новую версию (сначала пробуем обычный клиент, потом без проверки TLS)
 		resp, err := s.httpClient.Get(downloadURL)
 		if err != nil {
-			slog.Error("Ошибка скачивания", "error", err)
-			fyne.Do(func() {
-				onError(fmt.Errorf("ошибка скачивания: %w", err))
-			})
-			return
+			slog.Warn("Ошибка скачивания с проверкой TLS, пробуем без проверки", "error", err)
+			resp, err = s.insecureClient.Get(downloadURL)
+			if err != nil {
+				slog.Error("Ошибка скачивания", "error", err)
+				fyne.Do(func() {
+					onError(fmt.Errorf("ошибка скачивания: %w", err))
+				})
+				return
+			}
+			slog.Debug("Скачивание успешно без проверки TLS")
 		}
 		defer resp.Body.Close()
 
