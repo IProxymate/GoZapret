@@ -101,6 +101,8 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 	toolsMenu := fyne.NewMenu("Инструменты",
 		fyne.NewMenuItem("Проверить домен", v.showDomainCheck),
 		fyne.NewMenuItem("Мониторинг приложения", v.showAppMonitor),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Редактор hosts", v.showHostsEditor),
 	)
 
 	// Меню "Помощь"
@@ -665,6 +667,12 @@ func (v *MainView) showDomainCheck() {
 func (v *MainView) showAppMonitor() {
 	appMonitorView := NewAppMonitorView(v.app)
 	appMonitorView.Show()
+}
+
+// showHostsEditor показывает окно редактирования файла hosts
+func (v *MainView) showHostsEditor() {
+	hostsView := NewHostsView(v.app)
+	hostsView.Show()
 }
 
 // reloadStrategies перечитывает список стратегий и обновляет файлы в рабочей директории
