@@ -5,7 +5,8 @@
     "original_zapret": "bol-van/zapret"
   },
   "urls": {
-    "ipset_list": "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt"
+    "ipset_list": "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt",
+    "targets_file": "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/main/utils/targets.txt"
   },
   "check_domains": [
     {"name": "Discord Main", "url": "https://discord.com", "ping": "discord.com"},
@@ -15,8 +16,42 @@
     {"name": "YouTube Web", "url": "https://www.youtube.com", "ping": "www.youtube.com"},
     {"name": "YouTube Short", "url": "https://youtu.be", "ping": "youtu.be"},
     {"name": "YouTube Image", "url": "https://i.ytimg.com", "ping": "i.ytimg.com"},
+    {"name": "YouTube Video Redirect", "url": "https://redirector.googlevideo.com", "ping": "redirector.googlevideo.com"},
     {"name": "Google Main", "url": "https://www.google.com", "ping": "www.google.com"},
-    {"name": "Cloudflare Web", "url": "https://www.cloudflare.com", "ping": "www.cloudflare.com"}
+    {"name": "Google Gstatic", "url": "https://www.gstatic.com", "ping": "www.gstatic.com"},
+    {"name": "Cloudflare Web", "url": "https://www.cloudflare.com", "ping": "www.cloudflare.com"},
+    {"name": "Cloudflare CDN", "url": "https://cdnjs.cloudflare.com", "ping": "cdnjs.cloudflare.com"}
+  ],
+  "dns_servers": [
+    {"name": "Cloudflare DNS 1.1.1.1", "ip": "1.1.1.1"},
+    {"name": "Cloudflare DNS 1.0.0.1", "ip": "1.0.0.1"},
+    {"name": "Google DNS 8.8.8.8", "ip": "8.8.8.8"},
+    {"name": "Google DNS 8.8.4.4", "ip": "8.8.4.4"},
+    {"name": "Quad9 DNS 9.9.9.9", "ip": "9.9.9.9"}
+  ],
+  "dpi_suite": [
+    {"id": "US.CF-01", "provider": "Cloudflare", "url": "https://cdn.cookielaw.org/scripttemplates/202501.2.0/otBannerSdk.js"},
+    {"id": "US.CF-02", "provider": "Cloudflare", "url": "https://genshin.jmp.blue/characters/all#"},
+    {"id": "US.CF-03", "provider": "Cloudflare", "url": "https://api.frankfurter.dev/v1/2000-01-01..2002-12-31"},
+    {"id": "US.DO-01", "provider": "DigitalOcean", "url": "https://genderize.io/", "times": 2},
+    {"id": "DE.HE-01", "provider": "Hetzner", "url": "https://j.dejure.org/jcg/doctrine/doctrine_banner.webp"},
+    {"id": "FI.HE-01", "provider": "Hetzner", "url": "https://tcp1620-01.dubybot.live/1MB.bin"},
+    {"id": "FI.HE-02", "provider": "Hetzner", "url": "https://tcp1620-02.dubybot.live/1MB.bin"},
+    {"id": "FI.HE-03", "provider": "Hetzner", "url": "https://tcp1620-05.dubybot.live/1MB.bin"},
+    {"id": "FI.HE-04", "provider": "Hetzner", "url": "https://tcp1620-06.dubybot.live/1MB.bin"},
+    {"id": "FR.OVH-01", "provider": "OVH", "url": "https://eu.api.ovh.com/console/rapidoc-min.js"},
+    {"id": "FR.OVH-02", "provider": "OVH", "url": "https://ovh.sfx.ovh/10M.bin"},
+    {"id": "SE.OR-01", "provider": "Oracle", "url": "https://oracle.sfx.ovh/10M.bin"},
+    {"id": "DE.AWS-01", "provider": "AWS", "url": "https://tms.delta.com/delta/dl_anderson/Bootstrap.js"},
+    {"id": "US.AWS-01", "provider": "AWS", "url": "https://corp.kaltura.com/wp-content/cache/min/1/wp-content/themes/airfleet/dist/styles/theme.css"},
+    {"id": "US.GC-01", "provider": "Google Cloud", "url": "https://api.usercentrics.eu/gvl/v3/en.json"},
+    {"id": "US.FST-01", "provider": "Fastly", "url": "https://openoffice.apache.org/images/blog/rejected.png"},
+    {"id": "US.FST-02", "provider": "Fastly", "url": "https://www.juniper.net/etc.clientlibs/juniper/clientlibs/clientlib-site/resources/fonts/lato/Lato-Regular.woff2"},
+    {"id": "PL.AKM-01", "provider": "Akamai", "url": "https://www.lg.com/lg5-common-gp/library/jquery.min.js"},
+    {"id": "PL.AKM-02", "provider": "Akamai", "url": "https://media-assets.stryker.com/is/image/stryker/gateway_1?$max_width_1410$"},
+    {"id": "US.CDN77-01", "provider": "CDN77", "url": "https://cdn.eso.org/images/banner1920/eso2520a.jpg"},
+    {"id": "DE.CNTB-01", "provider": "Contabo", "url": "https://cloudlets.io/wp-content/themes/Avada/includes/lib/assets/fonts/fontawesome/webfonts/fa-solid-900.woff2"},
+    {"id": "FR.SW-01", "provider": "Scaleway", "url": "https://renklisigorta.com.tr/teklif-al"},
+    {"id": "US.CNST-01", "provider": "Constant", "url": "https://cdn.xuansiwei.com/common/lib/font-awesome/4.7.0/fontawesome-webfont.woff2?v=4.7.0"}
   ]
 }
-

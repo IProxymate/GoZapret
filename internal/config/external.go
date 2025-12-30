@@ -17,6 +17,20 @@ type CheckDomain struct {
 	Ping string `json:"ping"`
 }
 
+// DNSServer представляет DNS сервер для ping-проверки
+type DNSServer struct {
+	Name string `json:"name"`
+	IP   string `json:"ip"`
+}
+
+// DPISuiteTarget представляет цель для DPI проверки
+type DPISuiteTarget struct {
+	ID       string `json:"id"`
+	Provider string `json:"provider"`
+	URL      string `json:"url"`
+	Times    int    `json:"times,omitempty"` // количество повторений (по умолчанию 1)
+}
+
 // ExternalConfig содержит внешние URL и репозитории
 type ExternalConfig struct {
 	Repositories struct {
@@ -25,9 +39,12 @@ type ExternalConfig struct {
 		OriginalZapret  string `json:"original_zapret"`
 	} `json:"repositories"`
 	URLs struct {
-		IpsetList string `json:"ipset_list"`
+		IpsetList   string `json:"ipset_list"`
+		TargetsFile string `json:"targets_file"`
 	} `json:"urls"`
-	CheckDomains []CheckDomain `json:"check_domains"`
+	CheckDomains []CheckDomain    `json:"check_domains"`
+	DNSServers   []DNSServer      `json:"dns_servers"`
+	DPISuite     []DPISuiteTarget `json:"dpi_suite"`
 }
 
 var (
@@ -96,7 +113,31 @@ func (c *ExternalConfig) IpsetListURL() string {
 	return c.URLs.IpsetList
 }
 
+// TargetsFileURL возвращает URL для загрузки файла targets.txt
+func (c *ExternalConfig) TargetsFileURL() string {
+	return c.URLs.TargetsFile
+}
+
 // DownloadURL возвращает URL для скачивания релиза
 func (c *ExternalConfig) DownloadURL(version string) string {
 	return fmt.Sprintf("https://github.com/%s/releases/download/v%s/GoZapret.exe", c.Repositories.GoZapret, version)
+}
+
+// GetDPISuiteTargets возвращает развернутый список DPI целей с учетом повторений
+func (c *ExternalConfig) GetDPISuiteTargets() []DPISuiteTarget {
+	var targets []DPISuiteTarget
+	for _, t := range c.DPISuite {
+		times := t.Times
+		if times < 1 {
+			times = 1
+		}
+		for i := 0; i < times; i++ {
+			target := t
+			if times > 1 {
+				target.ID = fmt.Sprintf("%s@%d", t.ID, i)
+			}
+			targets = append(targets, target)
+		}
+	}
+	return targets
 }
