@@ -198,8 +198,9 @@ func (s *Service) downloadFile(url, filePath string) error {
 
 // isVersionNewer сравнивает две версии
 func (s *Service) isVersionNewer(currentVersion, newVersion string) bool {
-	currentVersion = strings.TrimPrefix(currentVersion, "v")
-	newVersion = strings.TrimPrefix(newVersion, "v")
+	// Убираем префикс "v" и возможную точку после него (v.1.0.5 -> 1.0.5)
+	currentVersion = strings.TrimPrefix(strings.TrimPrefix(currentVersion, "v"), ".")
+	newVersion = strings.TrimPrefix(strings.TrimPrefix(newVersion, "v"), ".")
 
 	if currentVersion == "" {
 		return true

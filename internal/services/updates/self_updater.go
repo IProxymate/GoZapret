@@ -138,8 +138,8 @@ func (s *SelfUpdater) CheckForUpdatesManual(onUpdateAvailable func(newVersion st
 			return
 		}
 
-		latestVersion := strings.TrimPrefix(release.TagName, "v")
-		currentVersion := strings.TrimPrefix(s.currentVersion, "v")
+		latestVersion := strings.TrimPrefix(strings.TrimPrefix(release.TagName, "v"), ".")
+		currentVersion := strings.TrimPrefix(strings.TrimPrefix(s.currentVersion, "v"), ".")
 
 		slog.Debug("Сравнение версий", "current", currentVersion, "latest", latestVersion)
 
