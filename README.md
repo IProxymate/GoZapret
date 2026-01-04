@@ -74,11 +74,6 @@ go-winres make
 go build -ldflags "-s -w -H=windowsgui" .
 ```
 
-Или используйте скрипт для сборки релиза:
-```powershell
-.\build_release.ps1 -Version "1.0.0"
-```
-
 ## Благодарности
 
 - [zapret](https://github.com/bol-van/zapret) — bol-van
