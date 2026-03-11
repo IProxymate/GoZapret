@@ -101,6 +101,8 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 	toolsMenu := fyne.NewMenu("Инструменты",
 		fyne.NewMenuItem("Проверить домен", v.showDomainCheck),
 		fyne.NewMenuItem("Мониторинг приложения", v.showAppMonitor),
+		fyne.NewMenuItemSeparator(),
+		fyne.NewMenuItem("Редактор hosts", v.showHostsEditor),
 	)
 
 	// Меню "Помощь"
@@ -117,14 +119,15 @@ func (v *MainView) buildMenu() *fyne.MainMenu {
 func (v *MainView) buildControlCard() *widget.Card {
 	// Создаем компоненты
 	strategyButton := v.createStrategyButton()
-	gameFilterCheck := v.createGameFilterCheck()
+	gameFilterSelect := v.createGameFilterSelect()
 	ipsetSelect := v.createIpsetSelect()
 	buttonContainer := v.createControlButtons()
 
 	// Контейнер для фильтров
 	filterContainer := container.NewCenter(
 		container.NewHBox(
-			gameFilterCheck,
+			widget.NewLabel("Game Filter:"),
+			gameFilterSelect,
 			widget.NewLabel("Режим IPset:"),
 			ipsetSelect,
 		),
@@ -252,43 +255,6 @@ func (v *MainView) showStrategySelectionDialog() {
 	customDialog.Show()
 }
 
-// createStrategySelect создает выпадающий список для выбора стратегии (для обратной совместимости)
-func (v *MainView) createStrategySelect() *widget.Select {
-	// Получаем начальный список стратегий
-	items, _ := v.app.State.Strategies.Get()
-	if items == nil {
-		items = []string{}
-	}
-
-	v.strategySelect = widget.NewSelect(items, func(s string) {
-		// Игнорируем изменения до завершения инициализации UI
-		if !v.uiInitialized {
-			return
-		}
-
-		v.app.State.SelectedStrategy.Set(s)
-		v.app.Services.Config.SetLastStrategyName(domain.StrategyName(s))
-
-		// Перезапускаем стратегию, если процесс запущен
-		v.restartCurrentStrategyIfRunning()
-	})
-
-	// Привязываем выбранную стратегию
-	v.app.State.SelectedStrategy.AddListener(binding.NewDataListener(func() {
-		selected, _ := v.app.State.SelectedStrategy.Get()
-		if v.strategySelect != nil {
-			v.strategySelect.SetSelected(selected)
-		}
-	}))
-
-	// Устанавливаем начальные значения
-	selected, _ := v.app.State.SelectedStrategy.Get()
-	if selected != "" {
-		v.strategySelect.SetSelected(selected)
-	}
-	return v.strategySelect
-}
-
 // UpdateStrategyOptions обновляет список стратегий в виджете (вызывается из App)
 func (v *MainView) UpdateStrategyOptions(items []string, selectedStrategy string) {
 	v.app.Logger.Debug("UpdateStrategyOptions: обновление виджета", "count", len(items), "selected", selectedStrategy)
@@ -321,35 +287,65 @@ func (v *MainView) UpdateStrategyOptions(items []string, selectedStrategy string
 		v.strategySelect.Options = items
 		if finalSelected != "" {
 			v.strategySelect.SetSelected(finalSelected)
-	}
-	v.strategySelect.Refresh()
+		}
+		v.strategySelect.Refresh()
 	}
 }
 
-// createGameFilterCheck создает чекбокс для Game Filter
-func (v *MainView) createGameFilterCheck() *widget.Check {
-	// Получаем начальное значение из конфига
-	initialValue, _ := v.app.State.GameFilter.Get()
+// createGameFilterSelect создает выпадающий список для выбора режима Game Filter
+func (v *MainView) createGameFilterSelect() *widget.Select {
+	// Получаем метки и значения
+	labels := domain.GameFilterModeLabels()
+	modeStrings := domain.AllGameFilterModeStrings()
 
-	// Создаем обычный чекбокс без привязки данных
-	gameFilterCheck := widget.NewCheck("Game Filter", func(checked bool) {
+	// Создаём список отображаемых меток
+	displayLabels := make([]string, len(modeStrings))
+	for i, mode := range modeStrings {
+		displayLabels[i] = labels[mode]
+	}
+
+	// Маппинг label -> mode и mode -> label
+	labelToMode := make(map[string]string, len(modeStrings))
+	modeToLabel := make(map[string]string, len(modeStrings))
+	for _, mode := range modeStrings {
+		labelToMode[labels[mode]] = mode
+		modeToLabel[mode] = labels[mode]
+	}
+
+	gameFilterSelect := widget.NewSelect(displayLabels, func(label string) {
 		// Игнорируем изменения до завершения инициализации UI
 		if !v.uiInitialized {
 			return
 		}
 
+		mode, ok := labelToMode[label]
+		if !ok {
+			return
+		}
+
 		// Сохраняем новое значение в конфиг
-		v.app.Services.Config.SetGameFilter(checked)
-		v.app.State.GameFilter.Set(checked)
+		v.app.Services.Config.SetGameFilterMode(mode)
+		v.app.State.GameFilterMode.Set(mode)
 
 		// Перезапускаем стратегию, если процесс запущен
 		v.restartCurrentStrategyIfRunning()
 	})
 
-	// Устанавливаем начальное значение
-	gameFilterCheck.Checked = initialValue
+	// Привязываем к состоянию
+	v.app.State.GameFilterMode.AddListener(binding.NewDataListener(func() {
+		mode, _ := v.app.State.GameFilterMode.Get()
+		if label, ok := modeToLabel[mode]; ok {
+			gameFilterSelect.SetSelected(label)
+		}
+	}))
 
-	return gameFilterCheck
+	// Устанавливаем начальное значение
+	currentMode, _ := v.app.State.GameFilterMode.Get()
+	if label, ok := modeToLabel[currentMode]; ok {
+		gameFilterSelect.SetSelected(label)
+	}
+
+	return gameFilterSelect
 }
 
 // createIpsetSelect создает выпадающий список для выбора режима IPset
@@ -474,10 +470,10 @@ func (v *MainView) handleStart() {
 
 	// Получаем выбранную стратегию и настройки
 	strategyName, _ := v.app.State.SelectedStrategy.Get()
-	gameFilter, _ := v.app.State.GameFilter.Get()
+	gameFilterMode, _ := v.app.State.GameFilterMode.Get()
 
 	// Запускаем через контроллер (статус обновится автоматически через EventBus)
-	err := v.app.Services.StrategyController.StartStrategy(strategyName, gameFilter)
+	err := v.app.Services.StrategyController.StartStrategy(strategyName, gameFilterMode)
 	if err != nil {
 		dialog.ShowError(err, v.app.Window)
 		return
@@ -665,6 +661,12 @@ func (v *MainView) showDomainCheck() {
 func (v *MainView) showAppMonitor() {
 	appMonitorView := NewAppMonitorView(v.app)
 	appMonitorView.Show()
+}
+
+// showHostsEditor показывает окно редактирования файла hosts
+func (v *MainView) showHostsEditor() {
+	hostsView := NewHostsView(v.app)
+	hostsView.Show()
 }
 
 // reloadStrategies перечитывает список стратегий и обновляет файлы в рабочей директории

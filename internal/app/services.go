@@ -26,7 +26,7 @@ type Services struct {
 	// Сервисы
 	Config      ConfigService
 	Strategy    StrategyService
-	Process     *process.Manager
+	Process     ProcessManager
 	Admin       AdminChecker
 	Diagnostics DiagnosticsRunner
 	Ipset       IpsetManager
@@ -148,4 +148,3 @@ func (s *Services) SyncAutostart(autoStartBinding interface{ Set(bool) error }, 
 		autoStartBinding.Set(cfg.AutoStart)
 	}
 }
-

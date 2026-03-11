@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
@@ -20,6 +21,7 @@ type ErrorCallback func(strategyName string, errorMsg string)
 
 // Manager координирует работу с процессами
 type Manager struct {
+	mu             sync.Mutex
 	currentProcess *domain.ProcessInfo
 	executor       *ProcessExecutor
 	monitor        *WindowsProcessMonitor
@@ -50,8 +52,8 @@ func NewManager(
 }
 
 // StartStrategy запускает стратегию
-func (m *Manager) StartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterEnabled bool) error {
-	slog.Info("Начало запуска стратегии", "strategy", strategy.Name, "gameFilter", gameFilterEnabled)
+func (m *Manager) StartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterMode domain.GameFilterMode) error {
+	slog.Info("Начало запуска стратегии", "strategy", strategy.Name, "gameFilterMode", gameFilterMode)
 
 	if err := strategy.Validate(); err != nil {
 		slog.Error("Ошибка валидации стратегии", "strategy", strategy.Name, "error", err)
@@ -89,7 +91,7 @@ func (m *Manager) StartStrategy(strategy *domain.Strategy, assetsPath domain.Ass
 	}
 
 	// Строим финальные аргументы
-	args := m.argsBuilder.Build(parsedArgs, workDir, gameFilterEnabled)
+	args := m.argsBuilder.Build(parsedArgs, workDir, gameFilterMode)
 
 	// Запускаем процесс
 	winwsPath := filepath.Join(workDir, "winws.exe")
@@ -100,6 +102,7 @@ func (m *Manager) StartStrategy(strategy *domain.Strategy, assetsPath domain.Ass
 	}
 
 	// Сохраняем информацию о процессе
+	m.mu.Lock()
 	m.currentProcess = &domain.ProcessInfo{
 		PID:       domain.ProcessID(result.Cmd.Process.Pid),
 		Strategy:  strategy.Name,
@@ -107,6 +110,7 @@ func (m *Manager) StartStrategy(strategy *domain.Strategy, assetsPath domain.Ass
 		Status:    domain.ProcessStatusStarting,
 		Command:   result.Cmd,
 	}
+	m.mu.Unlock()
 
 	// Запускаем мониторинг процесса
 	go m.monitorProcess(result)
@@ -127,11 +131,13 @@ func (m *Manager) StopProcess() error {
 		return domain.ErrProcessNotRunning
 	}
 
+	m.mu.Lock()
 	var cmd *exec.Cmd
 	if m.currentProcess != nil {
 		cmd = m.currentProcess.Command
 		m.currentProcess.Status = domain.ProcessStatusStopping
 	}
+	m.mu.Unlock()
 
 	if cmd != nil {
 		if err := m.executor.Stop(cmd); err != nil {
@@ -145,16 +151,21 @@ func (m *Manager) StopProcess() error {
 		}
 	}
 
+	m.mu.Lock()
 	if m.currentProcess != nil {
 		m.currentProcess.Status = domain.ProcessStatusStopped
 		m.currentProcess = nil
 	}
+	m.mu.Unlock()
 
 	return nil
 }
 
 // IsRunning проверяет, запущен ли процесс
 func (m *Manager) IsRunning() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.currentProcess == nil {
 		isRunning := m.monitor.IsWinwsRunning()
 		slog.Debug("Результат проверки процесса winws.exe в системе", "running", isRunning)
@@ -190,6 +201,9 @@ func (m *Manager) IsRunning() bool {
 
 // GetCurrentProcess возвращает информацию о текущем процессе
 func (m *Manager) GetCurrentProcess() *domain.ProcessInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.currentProcess != nil && m.currentProcess.Command != nil && m.currentProcess.Command.Process != nil {
 		pid := m.currentProcess.Command.Process.Pid
 
@@ -218,7 +232,7 @@ func (m *Manager) GetCurrentProcess() *domain.ProcessInfo {
 }
 
 // RestartStrategy перезапускает стратегию
-func (m *Manager) RestartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterEnabled bool) error {
+func (m *Manager) RestartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterMode domain.GameFilterMode) error {
 	// Останавливаем процесс, если он запущен (проверяем и внутреннее состояние, и системный процесс)
 	if m.IsRunning() || m.monitor.IsWinwsRunning() {
 		if err := m.StopProcess(); err != nil && err != domain.ErrProcessNotRunning {
@@ -246,9 +260,11 @@ func (m *Manager) RestartStrategy(strategy *domain.Strategy, assetsPath domain.A
 	}
 
 	// Сбрасываем внутреннее состояние
+	m.mu.Lock()
 	m.currentProcess = nil
+	m.mu.Unlock()
 
-	if err := m.StartStrategy(strategy, assetsPath, gameFilterEnabled); err != nil {
+	if err := m.StartStrategy(strategy, assetsPath, gameFilterMode); err != nil {
 		return fmt.Errorf("ошибка запуска стратегии: %w", err)
 	}
 
@@ -267,6 +283,9 @@ func (m *Manager) SetErrorCallback(callback ErrorCallback) {
 
 // GetLastError возвращает последнюю ошибку процесса
 func (m *Manager) GetLastError() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.currentProcess != nil {
 		return m.currentProcess.LastError
 	}
@@ -287,12 +306,56 @@ func (m *Manager) getWorkingBinDir() string {
 	return filepath.Join(workingDir, "bin")
 }
 
+// isSystemShutdownError проверяет, является ли ошибка результатом системного завершения
+// (выход из системы, перезагрузка, спящий режим)
+func (m *Manager) isSystemShutdownError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	// 0x40010004 - STATUS_THREAD_IS_TERMINATING (системное завершение сессии)
+	// 0xC000013A - STATUS_CONTROL_C_EXIT (Ctrl+C или SIGTERM)
+	// exit status 1 при корректном завершении через taskkill
+	systemExitCodes := []string{
+		"exit status 0x40010004",
+		"exit status 0xc000013a",
+		"exit status 1073807364", // десятичное значение 0x40010004
+	}
+
+	for _, code := range systemExitCodes {
+		if errStr == code {
+			return true
+		}
+	}
+
+	return false
+}
+
 // monitorProcess мониторит процесс в отдельной горутине
 func (m *Manager) monitorProcess(result *StartResult) {
 	err := result.Cmd.Wait()
 
+	m.mu.Lock()
 	if m.currentProcess != nil {
 		if err != nil {
+			// Если процесс был остановлен нами (StopProcess/RestartStrategy),
+			// статус уже Stopping — это не ошибка
+			if m.currentProcess.Status == domain.ProcessStatusStopping {
+				slog.Debug("Процесс winws завершён по запросу пользователя", "exit_code", err.Error())
+				m.currentProcess.Status = domain.ProcessStatusStopped
+				m.mu.Unlock()
+				return
+			}
+
+			// Проверяем, является ли это системным завершением (не ошибкой)
+			if m.isSystemShutdownError(err) {
+				slog.Debug("Процесс winws завершён системой (выход из системы/перезагрузка/спящий режим)", "exit_code", err.Error())
+				m.currentProcess.Status = domain.ProcessStatusStopped
+				m.mu.Unlock()
+				return
+			}
+
 			m.currentProcess.Status = domain.ProcessStatusFailed
 
 			// Получаем вывод stderr
@@ -309,10 +372,13 @@ func (m *Manager) monitorProcess(result *StartResult) {
 			if m.errorCallback != nil {
 				errorMsg := m.currentProcess.LastError
 				strategyName := string(m.currentProcess.Strategy)
+				m.mu.Unlock()
 				go m.errorCallback(strategyName, errorMsg)
+				return
 			}
 		} else {
 			m.currentProcess.Status = domain.ProcessStatusStopped
 		}
 	}
+	m.mu.Unlock()
 }

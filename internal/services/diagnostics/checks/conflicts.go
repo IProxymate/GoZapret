@@ -232,7 +232,8 @@ func (c *VPNServicesCheck) Name() string {
 
 func (c *VPNServicesCheck) Check() *domain.DiagnosticResult {
 	start := time.Now()
-	output, err := utils.OutputHidden("sc", "query")
+	// Используем cmd /c chcp 65001 для получения вывода в UTF-8 на русской Windows
+	output, err := utils.OutputHidden("cmd", "/c", "chcp 65001 >nul && sc query")
 
 	result := &domain.DiagnosticResult{
 		Name:      c.Name(),
@@ -250,30 +251,86 @@ func (c *VPNServicesCheck) Check() *domain.DiagnosticResult {
 	}
 
 	// Ищем VPN сервисы и собираем их имена
+	// Формат вывода sc query:
+	// SERVICE_NAME: ServiceName
+	// DISPLAY_NAME: Display Name
+	// ...пустая строка...
+	// SERVICE_NAME: NextService
 	var foundVPNServices []string
 	lines := strings.Split(string(output), "\n")
-	
+
+	var currentServiceName string
+	var currentDisplayName string
+
+	// Функция для проверки, является ли строка началом имени сервиса
+	// Поддерживаем английскую и русскую локализацию Windows
+	isServiceNameLine := func(line string) bool {
+		lower := strings.ToLower(line)
+		return strings.HasPrefix(lower, "service_name") || // English
+			strings.HasPrefix(lower, "имя_службы") // Russian
+	}
+
+	isDisplayNameLine := func(line string) bool {
+		lower := strings.ToLower(line)
+		return strings.HasPrefix(lower, "display_name") || // English
+			strings.HasPrefix(lower, "выводимое_имя") // Russian
+	}
+
 	for _, line := range lines {
-		lineLower := strings.ToLower(line)
-		if strings.Contains(lineLower, "vpn") {
-			// Извлекаем имя сервиса из строки SERVICE_NAME: xxx
-			if strings.Contains(lineLower, "service_name") {
-				parts := strings.SplitN(line, ":", 2)
-				if len(parts) >= 2 {
-					serviceName := strings.TrimSpace(parts[1])
-					if serviceName != "" {
-						foundVPNServices = append(foundVPNServices, serviceName)
+		lineTrimmed := strings.TrimSpace(line)
+
+		// Извлекаем SERVICE_NAME / Имя_службы
+		if isServiceNameLine(lineTrimmed) {
+			parts := strings.SplitN(lineTrimmed, ":", 2)
+			if len(parts) >= 2 {
+				currentServiceName = strings.TrimSpace(parts[1])
+			}
+		}
+
+		// Извлекаем DISPLAY_NAME / Выводимое_имя
+		if isDisplayNameLine(lineTrimmed) {
+			parts := strings.SplitN(lineTrimmed, ":", 2)
+			if len(parts) >= 2 {
+				currentDisplayName = strings.TrimSpace(parts[1])
+			}
+
+			// После DISPLAY_NAME проверяем, содержит ли сервис "vpn"
+			if currentServiceName != "" {
+				serviceNameLower := strings.ToLower(currentServiceName)
+				displayNameLower := strings.ToLower(currentDisplayName)
+
+				if strings.Contains(serviceNameLower, "vpn") || strings.Contains(displayNameLower, "vpn") {
+					// Проверяем, что это не системный сервис RasMan (Remote Access Connection Manager)
+					// который содержит VPN в описании, но не является VPN-клиентом
+					if !strings.Contains(serviceNameLower, "rasman") {
+						foundVPNServices = append(foundVPNServices, currentServiceName)
 					}
 				}
 			}
 		}
+
+		// Пустая строка - сброс текущего сервиса
+		if lineTrimmed == "" {
+			currentServiceName = ""
+			currentDisplayName = ""
+		}
 	}
 
-	if len(foundVPNServices) > 0 {
+	// Убираем дубликаты
+	uniqueServices := make(map[string]bool)
+	var uniqueVPNServices []string
+	for _, svc := range foundVPNServices {
+		if !uniqueServices[svc] {
+			uniqueServices[svc] = true
+			uniqueVPNServices = append(uniqueVPNServices, svc)
+		}
+	}
+
+	if len(uniqueVPNServices) > 0 {
 		result.Success = false
 		result.Message = "WARN"
-		result.Details["result"] = "Найдены VPN сервисы: " + strings.Join(foundVPNServices, ", ")
-		result.Details["vpn_services"] = foundVPNServices
+		result.Details["result"] = "Найдены VPN сервисы: " + strings.Join(uniqueVPNServices, ", ")
+		result.Details["vpn_services"] = uniqueVPNServices
 		result.Details["hint"] = "Некоторые VPN могут конфликтовать с zapret. Убедитесь, что все VPN отключены."
 	} else {
 		result.Success = true

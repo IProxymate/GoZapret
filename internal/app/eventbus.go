@@ -2,6 +2,7 @@ package app
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"fyne.io/fyne/v2"
 )
@@ -19,13 +20,6 @@ const (
 
 	// События статуса
 	EventStatusChanged EventType = "status.changed"
-
-	// События конфигурации
-	EventConfigChanged   EventType = "config.changed"
-	EventAssetsPathSet   EventType = "config.assets_path_set"
-	EventGameFilterSet   EventType = "config.game_filter_set"
-	EventIpsetModeSet    EventType = "config.ipset_mode_set"
-	EventAutoStartSet    EventType = "config.autostart_set"
 )
 
 // Event представляет событие в системе
@@ -36,14 +30,14 @@ type Event struct {
 
 // StrategyEventData данные события стратегии
 type StrategyEventData struct {
-	StrategyName string
-	GameFilter   bool
-	Error        error
+	StrategyName   string
+	GameFilterMode string
+	Error          error
 }
 
 // StatusEventData данные события статуса
 type StatusEventData struct {
-	IsRunning    bool
+	IsRunning     bool
 	StatusMessage string
 }
 
@@ -56,16 +50,23 @@ type StrategiesLoadedData struct {
 // EventHandler функция-обработчик события
 type EventHandler func(event Event)
 
+// subscription представляет подписку с уникальным ID
+type subscription struct {
+	id      uint64
+	handler EventHandler
+}
+
 // EventBus шина событий для связи между компонентами приложения
 type EventBus struct {
-	mu       sync.RWMutex
-	handlers map[EventType][]EventHandler
+	mu        sync.RWMutex
+	handlers  map[EventType][]subscription
+	nextSubID atomic.Uint64
 }
 
 // NewEventBus создаёт новую шину событий
 func NewEventBus() *EventBus {
 	return &EventBus{
-		handlers: make(map[EventType][]EventHandler),
+		handlers: make(map[EventType][]subscription),
 	}
 }
 
@@ -75,11 +76,15 @@ func (eb *EventBus) Subscribe(eventType EventType, handler EventHandler) func() 
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	eb.handlers[eventType] = append(eb.handlers[eventType], handler)
+	id := eb.nextSubID.Add(1)
+	eb.handlers[eventType] = append(eb.handlers[eventType], subscription{
+		id:      id,
+		handler: handler,
+	})
 
 	// Возвращаем функцию отписки
 	return func() {
-		eb.Unsubscribe(eventType, handler)
+		eb.unsubscribeByID(eventType, id)
 	}
 }
 
@@ -97,17 +102,16 @@ func (eb *EventBus) SubscribeMultiple(eventTypes []EventType, handler EventHandl
 	}
 }
 
-// Unsubscribe отписывает обработчик от события
-func (eb *EventBus) Unsubscribe(eventType EventType, handler EventHandler) {
+// unsubscribeByID отписывает обработчик по ID
+func (eb *EventBus) unsubscribeByID(eventType EventType, id uint64) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	handlers := eb.handlers[eventType]
-	for i, h := range handlers {
-		// Сравниваем указатели функций
-		if &h == &handler {
-			eb.handlers[eventType] = append(handlers[:i], handlers[i+1:]...)
-			break
+	subs := eb.handlers[eventType]
+	for i, s := range subs {
+		if s.id == id {
+			eb.handlers[eventType] = append(subs[:i], subs[i+1:]...)
+			return
 		}
 	}
 }
@@ -115,12 +119,12 @@ func (eb *EventBus) Unsubscribe(eventType EventType, handler EventHandler) {
 // Publish публикует событие всем подписчикам
 func (eb *EventBus) Publish(event Event) {
 	eb.mu.RLock()
-	handlers := make([]EventHandler, len(eb.handlers[event.Type]))
-	copy(handlers, eb.handlers[event.Type])
+	subs := make([]subscription, len(eb.handlers[event.Type]))
+	copy(subs, eb.handlers[event.Type])
 	eb.mu.RUnlock()
 
-	for _, handler := range handlers {
-		handler(event)
+	for _, s := range subs {
+		s.handler(event)
 	}
 }
 
@@ -139,12 +143,12 @@ func (eb *EventBus) PublishOnMainThread(event Event) {
 // Helper методы для публикации типизированных событий
 
 // PublishStrategyStarted публикует событие запуска стратегии
-func (eb *EventBus) PublishStrategyStarted(strategyName string, gameFilter bool) {
+func (eb *EventBus) PublishStrategyStarted(strategyName string, gameFilterMode string) {
 	eb.PublishOnMainThread(Event{
 		Type: EventStrategyStarted,
 		Data: StrategyEventData{
-			StrategyName: strategyName,
-			GameFilter:   gameFilter,
+			StrategyName:   strategyName,
+			GameFilterMode: gameFilterMode,
 		},
 	})
 }
@@ -189,4 +193,3 @@ func (eb *EventBus) PublishStrategiesLoaded(strategyNames []string, selected str
 		},
 	})
 }
-

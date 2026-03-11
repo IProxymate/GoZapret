@@ -5,12 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/IProxymate/GoZapret/internal/domain"
 )
 
 // ConfigManager интерфейс для работы с конфигурацией
 type ConfigManager interface {
 	GetExtraListPath() string
 	GetExcludeListPath() string
+	GetCustomIpsetPath() string
 	GetWorkingDir() string
 }
 
@@ -27,30 +30,59 @@ func NewArgsBuilder(configManager ConfigManager) *ArgsBuilder {
 }
 
 // Build строит финальные аргументы для запуска winws
-func (b *ArgsBuilder) Build(parsedArgs []string, workDir string, gameFilterEnabled bool) []string {
-	// Парсим аргументы с учетом Game Filter
-	args := b.parseWinwsArgs(strings.Join(parsedArgs, " "), gameFilterEnabled)
+func (b *ArgsBuilder) Build(parsedArgs []string, workDir string, gameFilterMode domain.GameFilterMode) []string {
+	rawArgs := strings.Join(parsedArgs, " ")
 
-	// Заменяем пути
+	// Определяем формат bat-файла (новый или старый)
+	isNewFormat := b.detectNewFormat(rawArgs)
+	slog.Debug("Определён формат bat-файла", "newFormat", isNewFormat, "gameFilterMode", gameFilterMode)
+
+	// Заменяем переменные GameFilter
+	argsStr := b.replaceGameFilterVars(rawArgs, gameFilterMode, isNewFormat)
+
+	// Парсим аргументы с учётом кавычек
+	args := b.parseQuotedArgs(argsStr)
+
+	// Разбиваем --key=value на отдельные --key и value,
+	// чтобы воспроизвести поведение CMD.exe, который обрабатывает '=' как разделитель
+	args = b.splitEqualsArgs(args)
+
+	// Заменяем пути %BIN% и %LISTS%
 	b.replacePathsInArgs(args, workDir)
 
-	// Добавляем пользовательские списки
-	args = b.addCustomHostlistArgs(args)
+	// Инжектируем пользовательские списки GoZapret в аргументы (для обоих форматов).
+	// Используем пути напрямую из configManager, без копирования файлов.
+	args = b.injectUserLists(args)
 
 	return args
 }
 
-// parseWinwsArgs парсит аргументы winws
-func (b *ArgsBuilder) parseWinwsArgs(argsStr string, gameFilterEnabled bool) []string {
-	slog.Debug("Парсинг аргументов winws", "gameFilter", gameFilterEnabled)
+// detectNewFormat определяет, использует ли bat-файл новый формат (v1.9.7+).
+// Новый формат содержит %GameFilterTCP% / %GameFilterUDP% и/или ссылки на user-списки.
+func (b *ArgsBuilder) detectNewFormat(argsStr string) bool {
+	return strings.Contains(argsStr, "%GameFilterTCP%") ||
+		strings.Contains(argsStr, "%GameFilterUDP%") ||
+		strings.Contains(argsStr, domain.ListExtraFile) ||
+		strings.Contains(argsStr, domain.ListExcludeFile)
+}
 
-	// Сначала заменяем %GameFilter% на нужное значение
-	gameFilterValue := "12"
-	if gameFilterEnabled {
-		gameFilterValue = "1024-65535"
+// replaceGameFilterVars заменяет переменные GameFilter на значения
+func (b *ArgsBuilder) replaceGameFilterVars(argsStr string, mode domain.GameFilterMode, isNewFormat bool) string {
+	if isNewFormat {
+		// Новый формат: раздельные переменные TCP и UDP
+		argsStr = strings.ReplaceAll(argsStr, "%GameFilterTCP%", mode.TCPValue())
+		argsStr = strings.ReplaceAll(argsStr, "%GameFilterUDP%", mode.UDPValue())
+		slog.Debug("Замена GameFilter (новый формат)", "tcp", mode.TCPValue(), "udp", mode.UDPValue())
 	}
-	argsStr = strings.ReplaceAll(argsStr, "%GameFilter%", gameFilterValue)
 
+	// Старый формат (или fallback): единая переменная %GameFilter%
+	argsStr = strings.ReplaceAll(argsStr, "%GameFilter%", mode.LegacyValue())
+
+	return argsStr
+}
+
+// parseQuotedArgs парсит строку аргументов с учётом кавычек
+func (b *ArgsBuilder) parseQuotedArgs(argsStr string) []string {
 	var args []string
 	var currentArg strings.Builder
 	inQuotes := false
@@ -78,31 +110,33 @@ func (b *ArgsBuilder) parseWinwsArgs(argsStr string, gameFilterEnabled bool) []s
 		args = append(args, currentArg.String())
 	}
 
-	// Применяем Game Filter (удаляем --filter-udp если Game Filter отключен)
-	if !gameFilterEnabled {
-		filteredArgs := make([]string, 0, len(args))
-		skipNext := false
+	return args
+}
 
-		for i, arg := range args {
-			if skipNext {
-				skipNext = false
-				continue
+// splitEqualsArgs разбивает аргументы формата --key=value на отдельные --key и value.
+// CMD.exe обрабатывает '=' как разделитель, поэтому bat-файл --dpi-desync=fake
+// превращается в два аргумента: --dpi-desync и fake.
+// Без этого winws.exe может некорректно обрабатывать некоторые параметры.
+func (b *ArgsBuilder) splitEqualsArgs(args []string) []string {
+	result := make([]string, 0, len(args)*2)
+
+	for _, arg := range args {
+		// Обрабатываем только аргументы, начинающиеся с --
+		if strings.HasPrefix(arg, "--") && strings.Contains(arg, "=") {
+			eqIdx := strings.Index(arg, "=")
+			key := arg[:eqIdx]
+			value := arg[eqIdx+1:]
+
+			result = append(result, key)
+			if value != "" {
+				result = append(result, value)
 			}
-
-			if arg == "--filter-udp" {
-				if i+1 < len(args) {
-					skipNext = true
-				}
-				continue
-			}
-
-			filteredArgs = append(filteredArgs, arg)
+		} else {
+			result = append(result, arg)
 		}
-
-		args = filteredArgs
 	}
 
-	return args
+	return result
 }
 
 // replacePathsInArgs заменяет относительные пути и переменные на абсолютные в аргументах
@@ -118,17 +152,15 @@ func (b *ArgsBuilder) replacePathsInArgs(args []string, workDir string) {
 		arg = strings.ReplaceAll(arg, "%BIN%", binDir+string(filepath.Separator))
 		arg = strings.ReplaceAll(arg, "%LISTS%", listsDir+string(filepath.Separator))
 
-		// %GameFilter% должен быть уже заменен в parseWinwsArgs
-		if strings.Contains(arg, "%GameFilter%") {
-			slog.Error("Обнаружена незамененная переменная %GameFilter%", "arg", arg)
-		}
-
 		args[i] = arg
 	}
 }
 
-// addCustomHostlistArgs добавляет аргументы для пользовательских списков доменов
-func (b *ArgsBuilder) addCustomHostlistArgs(args []string) []string {
+// injectUserLists инжектирует пользовательские списки GoZapret в аргументы.
+// Использует пути к файлам напрямую из configManager (без копирования).
+// Работает для обоих форматов bat-файлов (старого и нового).
+// Аргументы уже разбиты splitEqualsArgs, поэтому --hostlist и значение — отдельные элементы.
+func (b *ArgsBuilder) injectUserLists(args []string) []string {
 	if b.configManager == nil {
 		return args
 	}
@@ -141,16 +173,18 @@ func (b *ArgsBuilder) addCustomHostlistArgs(args []string) []string {
 	excludeExists := b.isFileNotEmpty(excludeListPath)
 
 	if !extraExists && !excludeExists {
-		slog.Debug("Пользовательские списки доменов пусты или не существуют")
+		slog.Debug("Пользовательские списки GoZapret пусты — инжекция не требуется")
 		return args
 	}
 
 	// Создаем новый массив аргументов
-	newArgs := make([]string, 0, len(args)+20)
+	newArgs := make([]string, 0, len(args)+30)
 
-	// Флаги для текущего профиля
+	// Флаги для текущего профиля (между --new)
 	addedExtraInProfile := false
 	addedExcludeInProfile := false
+	// Отслеживаем предыдущий флаг для инжекции после значения
+	pendingInject := ""
 
 	for _, arg := range args {
 		newArgs = append(newArgs, arg)
@@ -159,42 +193,53 @@ func (b *ArgsBuilder) addCustomHostlistArgs(args []string) []string {
 		if arg == "--new" {
 			addedExtraInProfile = false
 			addedExcludeInProfile = false
+			pendingInject = ""
 			continue
 		}
 
-		// После первого --hostlist= в профиле добавляем наши списки
-		if !addedExtraInProfile && strings.HasPrefix(arg, "--hostlist=") {
-			// Добавляем наш --hostlist для включенных доменов
-			if extraExists {
-				newArgs = append(newArgs, "--hostlist="+extraListPath)
-				slog.Debug("Добавлен --hostlist в профиль", "path", extraListPath)
+		// Если ожидаем значение после флага — инжектируем после него
+		if pendingInject != "" {
+			switch pendingInject {
+			case "hostlist":
+				if !addedExtraInProfile {
+					if extraExists {
+						newArgs = append(newArgs, "--hostlist", extraListPath)
+						slog.Debug("Инжектирован --hostlist GoZapret в профиль", "path", extraListPath)
+					}
+					if excludeExists && !addedExcludeInProfile {
+						newArgs = append(newArgs, "--hostlist-exclude", excludeListPath)
+						addedExcludeInProfile = true
+					}
+					addedExtraInProfile = true
+				}
+			case "hostlist-exclude":
+				if !addedExcludeInProfile && excludeExists {
+					newArgs = append(newArgs, "--hostlist-exclude", excludeListPath)
+					slog.Debug("Инжектирован --hostlist-exclude GoZapret в профиль", "path", excludeListPath)
+					addedExcludeInProfile = true
+				}
 			}
-			// Добавляем --hostlist-exclude для исключенных доменов
-			if excludeExists {
-				newArgs = append(newArgs, "--hostlist-exclude="+excludeListPath)
-				slog.Debug("Добавлен --hostlist-exclude в профиль", "path", excludeListPath)
-				addedExcludeInProfile = true
-			}
-			addedExtraInProfile = true
+			pendingInject = ""
+			continue
 		}
 
-		// Если встретили оригинальный --hostlist-exclude=, добавляем наш после него
-		if !addedExcludeInProfile && strings.HasPrefix(arg, "--hostlist-exclude=") {
-			if excludeExists {
-				newArgs = append(newArgs, "--hostlist-exclude="+excludeListPath)
-				slog.Debug("Добавлен --hostlist-exclude после оригинального", "path", excludeListPath)
-			}
-			addedExcludeInProfile = true
+		// Запоминаем флаг — следующий аргумент будет его значением
+		if !addedExtraInProfile && arg == "--hostlist" {
+			pendingInject = "hostlist"
+		} else if !addedExcludeInProfile && arg == "--hostlist-exclude" {
+			pendingInject = "hostlist-exclude"
 		}
 	}
 
-	slog.Info("Пользовательские списки доменов интегрированы в команду",
-		"extraList", extraExists, "excludeList", excludeExists)
+	if extraExists || excludeExists {
+		slog.Info("Пользовательские списки GoZapret инжектированы",
+			"extraList", extraExists, "excludeList", excludeExists)
+	}
 
 	return newArgs
 }
 
-// isFileNotEmpty проверяет, существует ли файл и не пуст ли он
+// isFileNotEmpty проверяет, существует ли файл и содержит ли он реальные данные
 func (b *ArgsBuilder) isFileNotEmpty(filePath string) bool {
 	info, err := os.Stat(filePath)
 	if err != nil {

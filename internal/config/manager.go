@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
@@ -12,6 +13,7 @@ import (
 
 // Manager управляет конфигурацией приложения
 type Manager struct {
+	mu         sync.RWMutex
 	configPath string
 	config     *domain.Config
 	workspace  *WorkspaceManager
@@ -31,6 +33,9 @@ func NewManager(configPath string, version string) *Manager {
 
 // Load загружает конфигурацию из файла
 func (m *Manager) Load() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	slog.Debug("Загрузка конфигурации", "path", m.configPath)
 
 	data, err := os.ReadFile(m.configPath)
@@ -63,7 +68,7 @@ func (m *Manager) defaultConfig() *domain.Config {
 		AssetsPath:       "",
 		LastAssetsPath:   "",
 		AutoStart:        domain.DefaultAutoStart,
-		GameFilter:       domain.DefaultGameFilter,
+		GameFilterMode:   domain.DefaultGameFilterMode.String(),
 		IpsetMode:        domain.DefaultIpsetMode.String(),
 		Version:          m.version,
 		UpdatedAt:        time.Now(),
@@ -73,6 +78,14 @@ func (m *Manager) defaultConfig() *domain.Config {
 
 // Save сохраняет конфигурацию в файл
 func (m *Manager) Save() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.saveLocked()
+}
+
+// saveLocked сохраняет конфигурацию в файл (должна вызываться под блокировкой)
+func (m *Manager) saveLocked() error {
 	m.config.UpdatedAt = time.Now()
 
 	if err := m.config.Validate(); err != nil {
@@ -109,11 +122,15 @@ func (m *Manager) Save() error {
 
 // GetConfig возвращает текущую конфигурацию
 func (m *Manager) GetConfig() *domain.Config {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.config
 }
 
 // UpdateConfig обновляет конфигурацию
 func (m *Manager) UpdateConfig(updateFn func(*domain.Config)) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	updateFn(m.config)
-	return m.Save()
+	return m.saveLocked()
 }

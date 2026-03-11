@@ -27,6 +27,8 @@ func (g *DescriptionGenerator) Generate(name domain.StrategyName) string {
 		return "Стратегия для YouTube " + name.String()
 	case strings.Contains(nameLower, "alt"):
 		return "Альтернативная стратегия " + name.String()
+	case strings.Contains(nameLower, "simple fake"):
+		return "Стратегия с простым фейком " + name.String()
 	case strings.Contains(nameLower, "fake") && strings.Contains(nameLower, "tls"):
 		return "Стратегия с FAKE TLS " + name.String()
 	case strings.Contains(nameLower, "quic"):

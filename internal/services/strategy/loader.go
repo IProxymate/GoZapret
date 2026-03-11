@@ -88,7 +88,7 @@ func (l *Loader) isServiceFile(fileName string) bool {
 	lowerName := strings.ToLower(fileName)
 
 	for _, prefix := range servicePrefixes {
-		if strings.Contains(lowerName, prefix) {
+		if strings.HasPrefix(lowerName, prefix) {
 			return true
 		}
 	}

@@ -1,68 +1,68 @@
 {
-    "RT_GROUP_ICON":  {
-                          "APP":  {
-                                      "0000":  [
-                                                   "icon16.png",
-                                                   "icon32.png",
-                                                   "icon48.png",
-                                                   "icon64.png",
-                                                   "icon128.png",
-                                                   "icon256.png"
-                                               ]
-                                  },
-                          "OTHER":  {
-                                        "0000":  "icon256.png"
-                                    }
-                      },
-    "RT_MANIFEST":  {
-                        "#1":  {
-                                   "0409":  {
-                                                "auto-elevate":  true,
-                                                "description":  "GoZapret - инструмент обхода блокировок",
-                                                "disable-theming":  false,
-                                                "disable-window-filtering":  false,
-                                                "dpi-awareness":  "system",
-                                                "execution-level":  "requireAdministrator",
-                                                "gdi-scaling":  false,
-                                                "high-resolution-scrolling-aware":  false,
-                                                "identity":  {
-                                                                 "name":  "GoZapret",
-                                                                 "version":  "1.0.4.0"
-                                                             },
-                                                "long-path-aware":  false,
-                                                "minimum-os":  "win7",
-                                                "printer-driver-isolation":  false,
-                                                "segment-heap":  false,
-                                                "ui-access":  false,
-                                                "ultra-high-resolution-scrolling-aware":  false,
-                                                "use-common-controls-v6":  false
-                                            }
-                               }
-                    },
-    "RT_VERSION":  {
-                       "#1":  {
-                                  "0000":  {
-                                               "fixed":  {
-                                                             "file_version":  "1.0.4.0",
-                                                             "product_version":  "1.0.4.0"
-                                                         },
-                                               "info":  {
-                                                            "0409":  {
-                                                                         "Comments":  "GoZapret - обход блокировок",
-                                                                         "CompanyName":  "GoZapret",
-                                                                         "FileDescription":  "GoZapret - инструмент обхода блокировок",
-                                                                         "FileVersion":  "1.0.4.0",
-                                                                         "InternalName":  "GoZapret",
-                                                                         "LegalCopyright":  "Copyright © 2025",
-                                                                         "LegalTrademarks":  "",
-                                                                         "OriginalFilename":  "GoZapret.exe",
-                                                                         "PrivateBuild":  "",
-                                                                         "ProductName":  "GoZapret",
-                                                                         "ProductVersion":  "1.0.4.0",
-                                                                         "SpecialBuild":  ""
-                                                                     }
-                                                        }
-                                           }
-                              }
-                   }
+    "RT_GROUP_ICON": {
+        "APP": {
+            "0000": [
+                "icon16.png",
+                "icon32.png",
+                "icon48.png",
+                "icon64.png",
+                "icon128.png",
+                "icon256.png"
+            ]
+        },
+        "OTHER": {
+            "0000": "icon256.png"
+        }
+    },
+    "RT_MANIFEST": {
+        "#1": {
+            "0409": {
+                "auto-elevate": true,
+                "description": "GoZapret - инструмент обхода блокировок",
+                "disable-theming": false,
+                "disable-window-filtering": false,
+                "dpi-awareness": "system",
+                "execution-level": "requireAdministrator",
+                "gdi-scaling": false,
+                "high-resolution-scrolling-aware": false,
+                "identity": {
+                    "name": "GoZapret",
+                    "version": "1.0.7.0"
+                },
+                "long-path-aware": false,
+                "minimum-os": "win7",
+                "printer-driver-isolation": false,
+                "segment-heap": false,
+                "ui-access": false,
+                "ultra-high-resolution-scrolling-aware": false,
+                "use-common-controls-v6": false
+            }
+        }
+    },
+    "RT_VERSION": {
+        "#1": {
+            "0000": {
+                "fixed": {
+                    "file_version": "1.0.7.0",
+                    "product_version": "1.0.7.0"
+                },
+                "info": {
+                    "0409": {
+                        "Comments": "GoZapret - обход блокировок",
+                        "CompanyName": "GoZapret",
+                        "FileDescription": "GoZapret - инструмент обхода блокировок",
+                        "FileVersion": "1.0.7.0",
+                        "InternalName": "GoZapret",
+                        "LegalCopyright": "Copyright © 2025",
+                        "LegalTrademarks": "",
+                        "OriginalFilename": "GoZapret.exe",
+                        "PrivateBuild": "",
+                        "ProductName": "GoZapret",
+                        "ProductVersion": "1.0.7.0",
+                        "SpecialBuild": ""
+                    }
+                }
+            }
+        }
+    }
 }

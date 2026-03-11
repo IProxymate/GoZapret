@@ -51,7 +51,12 @@ func (p *BatParser) extractWinwsArgs(content string) ([]string, error) {
 			foundWinws = true
 			argPart := p.extractArgsFromLine(line)
 			if argPart != "" {
-				commandLines = append(commandLines, argPart)
+				// Убираем символ переноса строки bat-файла (^), как и для продолжающих строк
+				argPart = strings.TrimSuffix(argPart, "^")
+				argPart = strings.TrimSpace(argPart)
+				if argPart != "" {
+					commandLines = append(commandLines, argPart)
+				}
 			}
 			continue
 		}
@@ -75,8 +80,26 @@ func (p *BatParser) extractWinwsArgs(content string) ([]string, error) {
 
 	fullCommand := strings.Join(commandLines, " ")
 	fullCommand = strings.TrimSpace(fullCommand)
+	fullCommand = p.unescapeBatSequences(fullCommand)
 
 	return strings.Fields(fullCommand), nil
+}
+
+// unescapeBatSequences убирает escape-последовательности Windows BAT-файлов.
+// Порядок замен важен: сначала все "^^" временно заменяются на placeholder,
+// затем обрабатываются остальные escape-последовательности, после чего placeholder
+// заменяется обратно на "^". Это позволяет корректно интерпретировать "^^" как один
+// символ "^", не мешая обработке других экранированных символов.
+func (p *BatParser) unescapeBatSequences(s string) string {
+	const placeholder = "\x00"
+	s = strings.ReplaceAll(s, "^^", placeholder)
+	s = strings.ReplaceAll(s, "^!", "!")
+	s = strings.ReplaceAll(s, "^&", "&")
+	s = strings.ReplaceAll(s, "^|", "|")
+	s = strings.ReplaceAll(s, "^<", "<")
+	s = strings.ReplaceAll(s, "^>", ">")
+	s = strings.ReplaceAll(s, placeholder, "^")
+	return s
 }
 
 // extractArgsFromLine извлекает аргументы из строки с winws.exe

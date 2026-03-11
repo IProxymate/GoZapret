@@ -1,6 +1,7 @@
 package updates
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -29,17 +30,33 @@ type DownloadResult struct {
 
 // Service управляет обновлениями приложения
 type Service struct {
-	githubClient *GitHubClient
-	httpClient   *http.Client
+	githubClient   *GitHubClient
+	httpClient     *http.Client
+	insecureClient *http.Client // клиент без проверки TLS для обхода корпоративных прокси
 }
 
 // NewService создает новый сервис обновлений
 func NewService(apiURL string) *Service {
-	return &Service{
-		githubClient: NewGitHubClient(apiURL),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+	// Стандартный клиент с проверкой TLS
+	normalClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// Клиент без проверки TLS (для корпоративных прокси с MITM)
+	insecureTransport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
 		},
+	}
+	insecureClient := &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: insecureTransport,
+	}
+
+	return &Service{
+		githubClient:   NewGitHubClient(apiURL),
+		httpClient:     normalClient,
+		insecureClient: insecureClient,
 	}
 }
 
@@ -125,10 +142,17 @@ func (s *Service) DownloadLatestRelease(currentVersion string, downloadPath stri
 
 // downloadFile загружает файл по URL
 func (s *Service) downloadFile(url, filePath string) error {
+	// Сначала пробуем с обычным клиентом
 	downloadResp, err := s.httpClient.Get(url)
 	if err != nil {
-		slog.Error("Ошибка загрузки архива", "error", err)
-		return fmt.Errorf("ошибка загрузки архива: %w", err)
+		// Если ошибка, пробуем без проверки TLS (для корпоративных прокси)
+		slog.Warn("Ошибка загрузки с проверкой TLS, пробуем без проверки", "error", err)
+		downloadResp, err = s.insecureClient.Get(url)
+		if err != nil {
+			slog.Error("Ошибка загрузки архива", "error", err)
+			return fmt.Errorf("ошибка загрузки архива: %w", err)
+		}
+		slog.Debug("Загрузка успешна без проверки TLS")
 	}
 	defer downloadResp.Body.Close()
 
@@ -174,8 +198,9 @@ func (s *Service) downloadFile(url, filePath string) error {
 
 // isVersionNewer сравнивает две версии
 func (s *Service) isVersionNewer(currentVersion, newVersion string) bool {
-	currentVersion = strings.TrimPrefix(currentVersion, "v")
-	newVersion = strings.TrimPrefix(newVersion, "v")
+	// Убираем префикс "v" и возможную точку после него (v.1.0.5 -> 1.0.5)
+	currentVersion = strings.TrimPrefix(strings.TrimPrefix(currentVersion, "v"), ".")
+	newVersion = strings.TrimPrefix(strings.TrimPrefix(newVersion, "v"), ".")
 
 	if currentVersion == "" {
 		return true
@@ -201,11 +226,16 @@ func (s *Service) UpdateIpsetList(assetsPath string, workingDir string) (*IpsetU
 
 	slog.Debug("Обновление списка ipset", "url", ipsetURL)
 
-	// Загружаем содержимое
+	// Загружаем содержимое (сначала пробуем обычный клиент, потом без проверки TLS)
 	resp, err := s.httpClient.Get(ipsetURL)
 	if err != nil {
-		slog.Error("Ошибка загрузки списка ipset", "error", err)
-		return nil, fmt.Errorf("ошибка загрузки списка ipset: %w", err)
+		slog.Warn("Ошибка загрузки ipset с проверкой TLS, пробуем без проверки", "error", err)
+		resp, err = s.insecureClient.Get(ipsetURL)
+		if err != nil {
+			slog.Error("Ошибка загрузки списка ipset", "error", err)
+			return nil, fmt.Errorf("ошибка загрузки списка ipset: %w", err)
+		}
+		slog.Debug("Загрузка ipset успешна без проверки TLS")
 	}
 	defer resp.Body.Close()
 

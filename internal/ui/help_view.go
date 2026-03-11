@@ -157,12 +157,12 @@ func parseURL(urlStr string) *url.URL {
 
 // updateCheckResult хранит результат проверки обновления
 type updateCheckResult struct {
-	name        string
-	hasUpdate   bool
-	currentVer  string
-	latestVer   string
-	err         error
-	updateFunc  func() // функция для выполнения обновления
+	name       string
+	hasUpdate  bool
+	currentVer string
+	latestVer  string
+	err        error
+	updateFunc func() // функция для выполнения обновления
 }
 
 // CheckAllUpdates проверяет все типы обновлений и показывает результат
@@ -248,7 +248,7 @@ func (v *HelpView) CheckAllUpdates() {
 func (v *HelpView) showAllUpdatesResult(results []*updateCheckResult) {
 	// Создаём окно с результатами
 	updatesWindow := v.app.FyneApp.NewWindow("Обновления")
-	updatesWindow.Resize(fyne.NewSize(500, 400))
+	updatesWindow.Resize(fyne.NewSize(600, 500))
 	updatesWindow.CenterOnScreen()
 
 	// Заголовок
@@ -542,13 +542,13 @@ func (v *HelpView) updateCurrentVersion(versionInfo *updates.VersionInfo) {
 type updateState struct {
 	wasRunning       bool
 	lastStrategyName domain.StrategyName
-	gameFilter       bool
+	gameFilterMode   string
 }
 
 // captureCurrentState сохраняет текущее состояние приложения
 func (v *HelpView) captureCurrentState() *updateState {
 	controller := v.app.Services.StrategyController
-	
+
 	state := &updateState{
 		wasRunning: controller.IsRunning(),
 	}
@@ -562,7 +562,7 @@ func (v *HelpView) captureCurrentState() *updateState {
 		}
 	}
 
-	state.gameFilter, _ = v.app.State.GameFilter.Get()
+	state.gameFilterMode, _ = v.app.State.GameFilterMode.Get()
 	return state
 }
 
@@ -586,14 +586,14 @@ func (v *HelpView) performUpdate(versionInfo *updates.VersionInfo, state *update
 
 	// Останавливаем процесс - всегда пытаемся остановить, независимо от state.wasRunning
 	// (процесс мог быть запущен извне или состояние могло быть неточным)
-		v.updateStatus(statusLabel, "Остановка процесса...")
-	
+	v.updateStatus(statusLabel, "Остановка процесса...")
+
 	// Сначала пытаемся остановить через контроллер
 	_ = v.app.Services.StrategyController.StopStrategy()
-	
+
 	// Принудительно убиваем все процессы winws
 	_ = utils.RunHidden("taskkill", "/F", "/IM", "winws.exe")
-	
+
 	// Ждём завершения процесса
 	v.updateStatus(statusLabel, "Ожидание завершения процесса...")
 	if err := v.waitForProcessTermination(5 * time.Second); err != nil {
@@ -603,7 +603,7 @@ func (v *HelpView) performUpdate(versionInfo *updates.VersionInfo, state *update
 	// Выгружаем драйвер WinDivert и ждём освобождения файлов
 	v.updateStatus(statusLabel, "Освобождение ресурсов...")
 	v.unloadWinDivertDriver()
-	
+
 	// Даём больше времени на освобождение файлов драйвером
 	time.Sleep(3 * time.Second)
 
@@ -676,7 +676,7 @@ func (v *HelpView) restartStrategy(state *updateState, newAssetsPath domain.Asse
 	v.updateStatus(statusLabel, "Запуск стратегии...")
 
 	// Статус обновится автоматически через EventBus
-	err := v.app.Services.StrategyController.StartStrategy(string(state.lastStrategyName), state.gameFilter)
+	err := v.app.Services.StrategyController.StartStrategy(string(state.lastStrategyName), state.gameFilterMode)
 	if err != nil {
 		return fmt.Errorf("ошибка запуска стратегии '%s': %w", state.lastStrategyName, err)
 	}
@@ -833,7 +833,7 @@ func (v *HelpView) restartStrategyIfRunning() {
 func (v *HelpView) waitForProcessTermination(timeout time.Duration) error {
 	checkInterval := 200 * time.Millisecond
 	elapsed := time.Duration(0)
-	
+
 	for elapsed < timeout {
 		if !v.app.Services.Process.IsWinwsProcessRunning() {
 			return nil
@@ -841,11 +841,11 @@ func (v *HelpView) waitForProcessTermination(timeout time.Duration) error {
 		time.Sleep(checkInterval)
 		elapsed += checkInterval
 	}
-	
+
 	// Ещё одна попытка принудительного завершения
 	_ = utils.RunHidden("taskkill", "/F", "/IM", "winws.exe")
 	time.Sleep(500 * time.Millisecond)
-	
+
 	if v.app.Services.Process.IsWinwsProcessRunning() {
 		return fmt.Errorf("процесс winws всё ещё запущен после %v", timeout)
 	}

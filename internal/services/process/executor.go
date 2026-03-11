@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os/exec"
 	"syscall"
-	"time"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
 	"github.com/IProxymate/GoZapret/internal/utils"
@@ -50,33 +49,18 @@ func (e *ProcessExecutor) Start(winwsPath string, args []string) (*StartResult, 
 
 // Stop останавливает процесс
 func (e *ProcessExecutor) Stop(cmd *exec.Cmd) error {
-	if err := e.GracefulShutdown(cmd, 3*time.Second); err != nil {
-		return e.ForceKill(cmd)
-	}
-	return nil
-}
-
-// GracefulShutdown пытается корректно завершить процесс
-func (e *ProcessExecutor) GracefulShutdown(cmd *exec.Cmd, timeout time.Duration) error {
 	if cmd.Process == nil {
 		return nil
 	}
 
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		return err
+	// На Windows SIGTERM не работает — сразу используем taskkill для корректного завершения
+	killCmd := exec.Command("taskkill", "/PID", fmt.Sprintf("%d", cmd.Process.Pid), "/F")
+	killCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := killCmd.Run(); err != nil {
+		// Если taskkill не помог, принудительно убиваем
+		return cmd.Process.Kill()
 	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case <-done:
-		return nil
-	case <-time.After(timeout):
-		return fmt.Errorf("таймаут ожидания завершения процесса")
-	}
+	return nil
 }
 
 // ForceKill принудительно убивает процесс

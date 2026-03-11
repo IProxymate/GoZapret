@@ -15,6 +15,12 @@ func (a *App) Run() {
 	a.setupSingleInstance()
 	a.setupLifecycle()
 
+	// В режиме автозапуска ждём готовности оболочки Explorer,
+	// чтобы системный трей был доступен для регистрации иконки
+	if slices.Contains(os.Args[1:], domain.ArgAutostart) {
+		a.waitForShell()
+	}
+
 	iconData := a.loadIcon()
 
 	a.Window = a.FyneApp.NewWindow(domain.AppName)
@@ -70,7 +76,7 @@ func (a *App) runInAutostartMode() {
 func (a *App) runInNormalMode() {
 	a.UpdateStatus()
 	a.AppStarted = true
-	a.Window.Resize(fyne.NewSize(800, 600))
+	a.Window.Resize(fyne.NewSize(900, 650))
 	a.Window.CenterOnScreen()
 	a.Window.ShowAndRun()
 }
@@ -84,18 +90,13 @@ func (a *App) handleAutostart() {
 		return
 	}
 
-	strategy, err := a.Services.Strategy.GetByName(lastStrategyName)
-	if err != nil || strategy == nil {
-		a.Logger.Warn("Последняя стратегия не найдена при автозапуске", "strategy", lastStrategyName, "error", err)
-		a.Window.Hide()
-		return
-	}
+	gameFilterMode := a.Services.Config.GetGameFilterMode()
 
-	err = a.Services.Process.StartStrategy(strategy, a.Services.Config.GetAssetsPath(), a.Services.Config.GetGameFilter())
+	err := a.Services.StrategyController.StartStrategy(lastStrategyName.String(), gameFilterMode)
 	if err != nil {
-		a.Logger.Error("Ошибка запуска стратегии при автозапуске", "strategy", strategy.Name, "error", err)
+		a.Logger.Error("Ошибка запуска стратегии при автозапуске", "strategy", lastStrategyName, "error", err)
 	} else {
-		a.Logger.Debug("Стратегия запущена при автозапуске", "strategy", strategy.Name)
+		a.Logger.Debug("Стратегия запущена при автозапуске", "strategy", lastStrategyName)
 	}
 
 	a.Window.Hide()
@@ -171,4 +172,3 @@ func (a *App) requestAssetsPath() {
 	})
 	infoDialog.Show()
 }
-
