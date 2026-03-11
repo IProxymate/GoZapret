@@ -26,19 +26,19 @@ func (w *WorkspaceManager) GetHostsDir() string {
 	return filepath.Join(w.configDir, domain.HostsDirName)
 }
 
-// GetExtraListPath возвращает путь к файлу list-extra.txt
+// GetExtraListPath возвращает путь к файлу list-general-user.txt
 func (w *WorkspaceManager) GetExtraListPath() string {
 	return filepath.Join(w.GetHostsDir(), domain.ListExtraFile)
 }
 
-// GetExcludeListPath возвращает путь к файлу list-extra-exclude.txt
+// GetExcludeListPath возвращает путь к файлу list-exclude-user.txt
 func (w *WorkspaceManager) GetExcludeListPath() string {
 	return filepath.Join(w.GetHostsDir(), domain.ListExcludeFile)
 }
 
-// GetCustomIpsetPath возвращает путь к файлу ipset-custom.txt
+// GetCustomIpsetPath возвращает путь к файлу ipset-exclude-user.txt
 func (w *WorkspaceManager) GetCustomIpsetPath() string {
-	return filepath.Join(w.GetHostsDir(), domain.IpsetCustomFile)
+	return filepath.Join(w.GetHostsDir(), domain.IpsetExcludeUserFile)
 }
 
 // EnsureHostsDirectory создает директорию hosts и файлы списков доменов
@@ -50,11 +50,34 @@ func (w *WorkspaceManager) EnsureHostsDirectory() error {
 		return fmt.Errorf("ошибка создания директории hosts: %w", err)
 	}
 
+	// Миграция: переименовываем старые файлы в новые
+	migrations := [][2]string{
+		{domain.LegacyListExtraFile, domain.ListExtraFile},
+		{domain.LegacyListExcludeFile, domain.ListExcludeFile},
+		{domain.LegacyIpsetCustomFile, domain.IpsetExcludeUserFile},
+	}
+
+	for _, m := range migrations {
+		oldPath := filepath.Join(hostsDir, m[0])
+		newPath := filepath.Join(hostsDir, m[1])
+		if _, err := os.Stat(oldPath); err == nil {
+			// Старый файл существует
+			if _, err := os.Stat(newPath); os.IsNotExist(err) {
+				// Новый файл НЕ существует — переименовываем
+				if err := os.Rename(oldPath, newPath); err != nil {
+					slog.Warn("Ошибка миграции файла", "old", oldPath, "new", newPath, "error", err)
+				} else {
+					slog.Info("Файл мигрирован", "old", m[0], "new", m[1])
+				}
+			}
+		}
+	}
+
 	// Создаем пустые файлы, если они не существуют
 	filesToCreate := []string{
 		domain.ListExtraFile,
 		domain.ListExcludeFile,
-		domain.IpsetCustomFile,
+		domain.IpsetExcludeUserFile,
 	}
 
 	for _, filename := range filesToCreate {
@@ -171,4 +194,3 @@ func (w *WorkspaceManager) copyAllFilesFromDir(srcDir, dstDir string) error {
 	slog.Debug("Файлы скопированы", "from", srcDir, "to", dstDir, "count", copiedCount)
 	return nil
 }
-

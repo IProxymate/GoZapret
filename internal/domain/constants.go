@@ -29,6 +29,92 @@ func AllIpsetModeStrings() []string {
 	}
 }
 
+// GameFilterMode представляет режим работы Game Filter
+type GameFilterMode string
+
+// Режимы Game Filter
+const (
+	// GameFilterDisabled - Game Filter отключён
+	GameFilterDisabled GameFilterMode = "disabled"
+	// GameFilterTCP - обрабатывать только TCP трафик на портах 1024-65535
+	GameFilterTCP GameFilterMode = "tcp"
+	// GameFilterUDP - обрабатывать только UDP трафик на портах 1024-65535
+	GameFilterUDP GameFilterMode = "udp"
+	// GameFilterAll - обрабатывать TCP и UDP трафик на портах 1024-65535
+	GameFilterAll GameFilterMode = "all"
+)
+
+// String возвращает строковое представление режима
+func (m GameFilterMode) String() string {
+	return string(m)
+}
+
+// IsEnabled возвращает true, если Game Filter включён в любом режиме
+func (m GameFilterMode) IsEnabled() bool {
+	return m != GameFilterDisabled && m != ""
+}
+
+// TCPEnabled возвращает true, если TCP порты должны быть открыты
+func (m GameFilterMode) TCPEnabled() bool {
+	return m == GameFilterTCP || m == GameFilterAll
+}
+
+// UDPEnabled возвращает true, если UDP порты должны быть открыты
+func (m GameFilterMode) UDPEnabled() bool {
+	return m == GameFilterUDP || m == GameFilterAll
+}
+
+// TCPValue возвращает значение для подстановки в %GameFilterTCP%
+func (m GameFilterMode) TCPValue() string {
+	if m.TCPEnabled() {
+		return "1024-65535"
+	}
+	return "12"
+}
+
+// UDPValue возвращает значение для подстановки в %GameFilterUDP%
+func (m GameFilterMode) UDPValue() string {
+	if m.UDPEnabled() {
+		return "1024-65535"
+	}
+	return "12"
+}
+
+// LegacyValue возвращает значение для подстановки в старый %GameFilter%
+func (m GameFilterMode) LegacyValue() string {
+	if m.IsEnabled() {
+		return "1024-65535"
+	}
+	return "12"
+}
+
+// AllGameFilterModeStrings возвращает все доступные режимы Game Filter как строки
+func AllGameFilterModeStrings() []string {
+	return []string{
+		GameFilterDisabled.String(),
+		GameFilterTCP.String(),
+		GameFilterUDP.String(),
+		GameFilterAll.String(),
+	}
+}
+
+// GameFilterModeLabels возвращает человекочитаемые метки для режимов
+func GameFilterModeLabels() map[string]string {
+	return map[string]string{
+		GameFilterDisabled.String(): "Выключен",
+		GameFilterTCP.String():      "TCP",
+		GameFilterUDP.String():      "UDP",
+		GameFilterAll.String():      "TCP + UDP",
+	}
+}
+
+// GameFilterModeFromBool конвертирует старый bool формат в GameFilterMode (для миграции)
+func GameFilterModeFromBool(enabled bool) GameFilterMode {
+	if enabled {
+		return GameFilterUDP // по умолчанию UDP, как в zapret v1.9.7
+	}
+	return GameFilterDisabled
+}
 
 // StatusMessage представляет сообщение о статусе
 type StatusMessage string
@@ -64,26 +150,30 @@ func (statusStoppedLastUsed) Format(strategy interface{}) string {
 
 // Настройки по умолчанию
 const (
-	DefaultAutoStart  = true
-	DefaultGameFilter = false
-	DefaultIpsetMode  = IpsetModeNone
+	DefaultAutoStart      = true
+	DefaultGameFilterMode = GameFilterDisabled
+	DefaultIpsetMode      = IpsetModeNone
 )
 
 // Имена файлов
 const (
-	WinwsExecutable = "winws.exe"
-	ServiceBatFile  = "service.bat"
-	ListExtraFile   = "list-extra.txt"
-	ListExcludeFile = "list-extra-exclude.txt"
-	IpsetCustomFile = "ipset-custom.txt"
-	IpsetAllFile    = "ipset-all.txt"
-	ConfigFileName  = "config.json"
-	HostsDirName    = "hosts"
-	BinDirName      = "bin"
-	ListsDirName    = "lists"
-	WorkingDirName  = "working"
-	LogsDirName     = "logs"
-	AppLogFile      = "app.log"
+	WinwsExecutable      = "winws.exe"
+	ServiceBatFile       = "service.bat"
+	ListExtraFile        = "list-general-user.txt"
+	ListExcludeFile      = "list-exclude-user.txt"
+	IpsetExcludeUserFile = "ipset-exclude-user.txt"
+	// Устаревшие имена файлов (для миграции)
+	LegacyListExtraFile   = "list-extra.txt"
+	LegacyListExcludeFile = "list-extra-exclude.txt"
+	LegacyIpsetCustomFile = "ipset-custom.txt"
+	IpsetAllFile          = "ipset-all.txt"
+	ConfigFileName        = "config.json"
+	HostsDirName          = "hosts"
+	BinDirName            = "bin"
+	ListsDirName          = "lists"
+	WorkingDirName        = "working"
+	LogsDirName           = "logs"
+	AppLogFile            = "app.log"
 )
 
 // Имя приложения

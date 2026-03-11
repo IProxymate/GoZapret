@@ -136,32 +136,14 @@ func (a *App) GetWindow() fyne.Window {
 // UpdateStatus обновляет статус приложения
 func (a *App) UpdateStatus() {
 	fyne.Do(func() {
-		running := a.Services.Process.IsRunning()
+		running := a.Services.StrategyController.IsRunning()
 		a.Logger.Debug("Обновление статуса приложения", "running", running)
 		a.State.IsRunning.Set(running)
 
-		statusMsg := a.buildStatusMessage(running)
+		statusMsg := a.Services.StrategyController.GetStatusMessage()
 		a.State.StatusText.Set(statusMsg)
 		a.Logger.Debug("Статус обновлен", "status", statusMsg)
 	})
-}
-
-// buildStatusMessage формирует сообщение о статусе
-func (a *App) buildStatusMessage(running bool) string {
-	if running {
-		if processInfo := a.Services.Process.GetCurrentProcess(); processInfo != nil && processInfo.Strategy != "" {
-			return domain.StatusRunningWith.Format(processInfo.Strategy)
-		}
-		if lastStrategy := a.Services.Config.GetLastStrategyName(); lastStrategy != "" {
-			return domain.StatusRunningWith.Format(lastStrategy)
-		}
-		return string(domain.StatusRunning)
-	}
-
-	if lastStrategy := a.Services.Config.GetLastStrategyName(); lastStrategy != "" {
-		return domain.StatusStoppedLastUsed.Format(lastStrategy)
-	}
-	return string(domain.StatusStopped)
 }
 
 // ShowFolderDialog показывает диалог выбора папки
@@ -206,4 +188,3 @@ func (a *App) ShowProcessError(strategyName, errorMsg string) {
 
 	dialog.ShowError(fmt.Errorf("%s", message), a.Window)
 }
-

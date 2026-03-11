@@ -40,12 +40,12 @@ type AllStrategiesTestResult struct {
 
 // StrategyTester тестер стратегий
 type StrategyTester struct {
-	batParser     *process.BatParser
-	argsBuilder   *process.ArgsBuilder
-	multiChecker  *MultiChecker
-	workingBinDir string
-	assetsPath    domain.AssetsPath
-	gameFilter    bool
+	batParser      *process.BatParser
+	argsBuilder    *process.ArgsBuilder
+	multiChecker   *MultiChecker
+	workingBinDir  string
+	assetsPath     domain.AssetsPath
+	gameFilterMode domain.GameFilterMode
 
 	// Для отслеживания прогресса
 	progressCallback func(StrategyTestProgress)
@@ -59,15 +59,15 @@ func NewStrategyTester(
 	argsBuilder *process.ArgsBuilder,
 	workingBinDir string,
 	assetsPath domain.AssetsPath,
-	gameFilter bool,
+	gameFilterMode domain.GameFilterMode,
 ) *StrategyTester {
 	return &StrategyTester{
-		batParser:     batParser,
-		argsBuilder:   argsBuilder,
-		multiChecker:  NewMultiChecker(),
-		workingBinDir: workingBinDir,
-		assetsPath:    assetsPath,
-		gameFilter:    gameFilter,
+		batParser:      batParser,
+		argsBuilder:    argsBuilder,
+		multiChecker:   NewMultiChecker(),
+		workingBinDir:  workingBinDir,
+		assetsPath:     assetsPath,
+		gameFilterMode: gameFilterMode,
 	}
 }
 
@@ -223,7 +223,7 @@ func (t *StrategyTester) startWinws(ctx context.Context, strategy *domain.Strate
 	}
 
 	// Строим финальные аргументы
-	args := t.argsBuilder.Build(parsedArgs, t.workingBinDir, t.gameFilter)
+	args := t.argsBuilder.Build(parsedArgs, t.workingBinDir, t.gameFilterMode)
 
 	// Запускаем процесс
 	winwsPath := filepath.Join(t.workingBinDir, "winws.exe")
@@ -288,4 +288,3 @@ func (t *StrategyTester) TestSingleStrategySync(
 	ctx := context.Background()
 	return t.testSingleStrategy(ctx, strategy, mode, targets, 1, 1)
 }
-

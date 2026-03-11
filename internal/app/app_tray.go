@@ -3,13 +3,47 @@ package app
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
 )
+
+// waitForShell ожидает готовности оболочки Explorer (наличие окна Shell_TrayWnd).
+// Вызывается при автозапуске, чтобы системный трей был доступен для регистрации иконки.
+func (a *App) waitForShell() {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	findWindow := user32.NewProc("FindWindowW")
+	className, _ := syscall.UTF16PtrFromString("Shell_TrayWnd")
+
+	const (
+		timeout      = 60 * time.Second
+		pollInterval = 500 * time.Millisecond
+		settleDelay  = 3 * time.Second
+	)
+
+	a.Logger.Info("Ожидание готовности оболочки Explorer...")
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		hwnd, _, _ := findWindow.Call(
+			uintptr(unsafe.Pointer(className)),
+			0,
+		)
+		if hwnd != 0 {
+			a.Logger.Info("Оболочка Explorer готова, ожидание стабилизации", "settleDelay", settleDelay)
+			time.Sleep(settleDelay)
+			return
+		}
+		time.Sleep(pollInterval)
+	}
+
+	a.Logger.Warn("Таймаут ожидания оболочки Explorer", "timeout", timeout)
+}
 
 // setupTray настраивает сворачивание приложения в системный трей
 func (a *App) setupTray(icon []byte) {
@@ -106,4 +140,3 @@ func (a *App) loadIconData() ([]byte, error) {
 
 	return nil, fmt.Errorf("иконка не найдена")
 }
-

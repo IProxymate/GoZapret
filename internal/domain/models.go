@@ -37,11 +37,28 @@ type Config struct {
 	AssetsPath       AssetsPath   `json:"assets_path"`
 	LastAssetsPath   AssetsPath   `json:"last_assets_path,omitempty"` // Последний путь, для которого копировались файлы
 	AutoStart        bool         `json:"auto_start"`
-	GameFilter       bool         `json:"game_filter"`
-	IpsetMode        string       `json:"ipset_mode"` // "any", "none", "loaded"
+	GameFilterMode   string       `json:"game_filter_mode"`      // "disabled", "tcp", "udp", "all"
+	GameFilter       bool         `json:"game_filter,omitempty"` // deprecated: для обратной совместимости при чтении старых конфигов
+	IpsetMode        string       `json:"ipset_mode"`            // "any", "none", "loaded"
 	Version          string       `json:"version"`
 	UpdatedAt        time.Time    `json:"updated_at"`
 	WorkingDir       string       `json:"working_dir,omitempty"`
+}
+
+// GetGameFilterMode возвращает текущий режим GameFilter с учётом миграции
+func (c *Config) GetGameFilterMode() GameFilterMode {
+	// Если новое поле заполнено, используем его
+	if c.GameFilterMode != "" {
+		return GameFilterMode(c.GameFilterMode)
+	}
+	// Миграция со старого bool поля
+	return GameFilterModeFromBool(c.GameFilter)
+}
+
+// SetGameFilterMode устанавливает режим GameFilter
+func (c *Config) SetGameFilterMode(mode GameFilterMode) {
+	c.GameFilterMode = mode.String()
+	c.GameFilter = mode.IsEnabled() // поддержка обратной совместимости
 }
 
 // Validate проверяет корректность конфигурации

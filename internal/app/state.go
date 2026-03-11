@@ -3,7 +3,6 @@ package app
 import (
 	"fyne.io/fyne/v2/data/binding"
 	"github.com/IProxymate/GoZapret/internal/domain"
-	"github.com/IProxymate/GoZapret/internal/services/process"
 )
 
 // State содержит состояние UI приложения через биндинги Fyne
@@ -18,10 +17,10 @@ type State struct {
 	Strategies       binding.StringList
 
 	// Настройки
-	AutoStart  binding.Bool
-	GameFilter binding.Bool
-	IpsetMode  binding.String
-	Version    binding.String
+	AutoStart      binding.Bool
+	GameFilterMode binding.String
+	IpsetMode      binding.String
+	Version        binding.String
 }
 
 // NewState создает новое состояние UI
@@ -32,14 +31,14 @@ func NewState() *State {
 		SelectedStrategy: binding.NewString(),
 		Strategies:       binding.NewStringList(),
 		AutoStart:        binding.NewBool(),
-		GameFilter:       binding.NewBool(),
+		GameFilterMode:   binding.NewString(),
 		IpsetMode:        binding.NewString(),
 		Version:          binding.NewString(),
 	}
 }
 
 // InitFromConfig инициализирует состояние из конфигурации
-func (s *State) InitFromConfig(configService ConfigService, processManager *process.Manager) {
+func (s *State) InitFromConfig(configService ConfigService, processManager ProcessManager) {
 	cfg := configService.GetConfig()
 
 	// Устанавливаем начальный статус с использованием констант
@@ -57,8 +56,7 @@ func (s *State) InitFromConfig(configService ConfigService, processManager *proc
 
 	// Настройки из конфига
 	s.AutoStart.Set(cfg.AutoStart)
-	s.GameFilter.Set(cfg.GameFilter)
+	s.GameFilterMode.Set(cfg.GetGameFilterMode().String())
 	s.IpsetMode.Set(cfg.IpsetMode)
 	s.Version.Set(cfg.Version)
 }
-

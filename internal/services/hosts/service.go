@@ -3,6 +3,7 @@ package hosts
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,33 +241,9 @@ func (s *Service) ToggleEntry(hostname string) error {
 	return s.Write(strings.Join(newLines, "\n") + "\n")
 }
 
-// FlushDNS сбрасывает DNS кэш Windows
-func (s *Service) FlushDNS() error {
-	// Используем ipconfig /flushdns
-	// Эта функция вызывается из UI после изменения hosts
-	return nil // Реализация будет в UI через exec.Command
-}
-
-// ValidateIP проверяет корректность IP адреса
+// ValidateIP проверяет корректность IP адреса (IPv4 и IPv6)
 func (s *Service) ValidateIP(ip string) bool {
-	parts := strings.Split(ip, ".")
-	if len(parts) != 4 {
-		return false
-	}
-
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-		// Проверяем, что это число от 0 до 255
-		var num int
-		_, err := fmt.Sscanf(part, "%d", &num)
-		if err != nil || num < 0 || num > 255 {
-			return false
-		}
-	}
-
-	return true
+	return net.ParseIP(ip) != nil
 }
 
 // ValidateHostname проверяет корректность hostname
@@ -292,4 +269,3 @@ func (s *Service) ValidateHostname(hostname string) bool {
 
 	return true
 }
-

@@ -3,18 +3,19 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/IProxymate/GoZapret/internal/domain"
-	"github.com/IProxymate/GoZapret/internal/services/process"
 )
 
 // StrategyController управляет бизнес-логикой стратегий.
 // Это промежуточный слой между UI и сервисами.
 type StrategyController struct {
+	mu              sync.Mutex // сериализует операции start/stop/restart
 	logger          *slog.Logger
 	configService   ConfigService
 	strategyService StrategyService
-	processManager  *process.Manager
+	processManager  ProcessManager
 	eventBus        *EventBus
 }
 
@@ -23,7 +24,7 @@ func NewStrategyController(
 	logger *slog.Logger,
 	configService ConfigService,
 	strategyService StrategyService,
-	processManager *process.Manager,
+	processManager ProcessManager,
 	eventBus *EventBus,
 ) *StrategyController {
 	return &StrategyController{
@@ -36,7 +37,10 @@ func NewStrategyController(
 }
 
 // StartStrategy запускает указанную стратегию
-func (c *StrategyController) StartStrategy(strategyName string, gameFilter bool) error {
+func (c *StrategyController) StartStrategy(strategyName string, gameFilterMode string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if strategyName == "" {
 		return fmt.Errorf("стратегия не выбрана")
 	}
@@ -55,9 +59,9 @@ func (c *StrategyController) StartStrategy(strategyName string, gameFilter bool)
 		return fmt.Errorf("путь к ресурсам не установлен")
 	}
 
-	c.logger.Info("Запуск стратегии", "strategy", strategyName, "gameFilter", gameFilter)
+	c.logger.Info("Запуск стратегии", "strategy", strategyName, "gameFilterMode", gameFilterMode)
 
-	if err := c.processManager.StartStrategy(strategy, assetsPath, gameFilter); err != nil {
+	if err := c.processManager.StartStrategy(strategy, assetsPath, domain.GameFilterMode(gameFilterMode)); err != nil {
 		c.eventBus.PublishStrategyError(strategyName, err)
 		return fmt.Errorf("ошибка запуска стратегии: %w", err)
 	}
@@ -66,7 +70,7 @@ func (c *StrategyController) StartStrategy(strategyName string, gameFilter bool)
 	c.configService.SetLastStrategyName(domain.StrategyName(strategyName))
 
 	// Публикуем события
-	c.eventBus.PublishStrategyStarted(strategyName, gameFilter)
+	c.eventBus.PublishStrategyStarted(strategyName, gameFilterMode)
 	c.publishStatusChanged()
 
 	return nil
@@ -74,6 +78,9 @@ func (c *StrategyController) StartStrategy(strategyName string, gameFilter bool)
 
 // StopStrategy останавливает текущую стратегию
 func (c *StrategyController) StopStrategy() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.processManager.IsRunning() && !c.processManager.IsWinwsProcessRunning() {
 		return fmt.Errorf("процесс не запущен")
 	}
@@ -92,7 +99,10 @@ func (c *StrategyController) StopStrategy() error {
 }
 
 // RestartCurrentStrategy перезапускает текущую стратегию
-func (c *StrategyController) RestartCurrentStrategy(strategyName string, gameFilter bool) error {
+func (c *StrategyController) RestartCurrentStrategy(strategyName string, gameFilterMode string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.processManager.IsRunning() && !c.processManager.IsWinwsProcessRunning() {
 		return nil // Не запущена — нечего перезапускать
 	}
@@ -113,15 +123,15 @@ func (c *StrategyController) RestartCurrentStrategy(strategyName string, gameFil
 
 	c.logger.Info("Перезапуск стратегии", "strategy", strategyName)
 
-	if err := c.processManager.RestartStrategy(strategy, assetsPath, gameFilter); err != nil {
+	if err := c.processManager.RestartStrategy(strategy, assetsPath, domain.GameFilterMode(gameFilterMode)); err != nil {
 		c.eventBus.PublishStrategyError(strategyName, err)
 		return fmt.Errorf("ошибка перезапуска стратегии: %w", err)
 	}
 
 	// Публикуем событие
 	c.eventBus.Publish(Event{Type: EventStrategyRestart, Data: StrategyEventData{
-		StrategyName: strategyName,
-		GameFilter:   gameFilter,
+		StrategyName:   strategyName,
+		GameFilterMode: gameFilterMode,
 	}})
 	c.publishStatusChanged()
 
@@ -146,8 +156,9 @@ func (c *StrategyController) GetLastStrategyName() string {
 	return string(c.configService.GetLastStrategyName())
 }
 
-// LoadStrategies загружает стратегии из указанного пути
-func (c *StrategyController) LoadStrategies(assetsPath domain.AssetsPath) ([]string, error) {
+// LoadStrategies загружает стратегии из указанного пути.
+// preferredStrategy — имя стратегии, которую нужно выбрать (пустая строка = последняя или первая).
+func (c *StrategyController) LoadStrategies(assetsPath domain.AssetsPath, preferredStrategy string) ([]string, error) {
 	if err := c.strategyService.LoadFromPath(assetsPath); err != nil {
 		return nil, fmt.Errorf("ошибка загрузки стратегий: %w", err)
 	}
@@ -161,8 +172,20 @@ func (c *StrategyController) LoadStrategies(assetsPath domain.AssetsPath) ([]str
 	c.logger.Info("Загружены стратегии", "count", len(strategyNames))
 
 	// Определяем выбранную стратегию
-	selected := c.GetLastStrategyName()
-	if selected == "" && len(strategyNames) > 0 {
+	selected := preferredStrategy
+	if selected == "" {
+		selected = c.GetLastStrategyName()
+	}
+
+	// Проверяем, что выбранная стратегия существует в списке
+	found := false
+	for _, name := range strategyNames {
+		if name == selected {
+			found = true
+			break
+		}
+	}
+	if !found && len(strategyNames) > 0 {
 		selected = strategyNames[0]
 	}
 

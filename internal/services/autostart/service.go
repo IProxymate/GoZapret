@@ -51,8 +51,18 @@ func (s *Service) SetAutoStart(enabled bool) error {
 
 	slog.Debug("Удаление автозапуска")
 	// Удаляем и задачу, и запись в реестре
-	_ = s.taskScheduler.RemoveTask()
-	_ = s.registry.Remove()
+	var errs []error
+	if err := s.taskScheduler.RemoveTask(); err != nil {
+		slog.Warn("Ошибка удаления задачи автозапуска", "error", err)
+		errs = append(errs, err)
+	}
+	if err := s.registry.Remove(); err != nil {
+		slog.Warn("Ошибка удаления записи реестра автозапуска", "error", err)
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		slog.Warn("Не все компоненты автозапуска удалены", "errors", len(errs))
+	}
 	slog.Debug("Автозапуск отключен")
 	return nil
 }

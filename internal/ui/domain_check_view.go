@@ -498,13 +498,13 @@ func (v *DomainCheckView) startStrategyTest(
 	}
 
 	assetsPath := v.app.Services.Config.GetAssetsPath()
-	gameFilter, _ := v.app.State.GameFilter.Get()
+	gameFilterMode, _ := v.app.State.GameFilterMode.Get()
 
 	batParser := process.NewBatParser()
 	argsBuilder := process.NewArgsBuilder(v.app.Services.Config)
 	workingBinDir := filepath.Join(workingDir, "bin")
 
-	tester := domain_check.NewStrategyTester(batParser, argsBuilder, workingBinDir, assetsPath, gameFilter)
+	tester := domain_check.NewStrategyTester(batParser, argsBuilder, workingBinDir, assetsPath, domain.GameFilterMode(gameFilterMode))
 	*testerPtr = tester
 
 	// Создаём контекст с отменой

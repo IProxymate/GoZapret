@@ -51,7 +51,12 @@ func (p *BatParser) extractWinwsArgs(content string) ([]string, error) {
 			foundWinws = true
 			argPart := p.extractArgsFromLine(line)
 			if argPart != "" {
-				commandLines = append(commandLines, argPart)
+				// Убираем символ переноса строки bat-файла (^), как и для продолжающих строк
+				argPart = strings.TrimSuffix(argPart, "^")
+				argPart = strings.TrimSpace(argPart)
+				if argPart != "" {
+					commandLines = append(commandLines, argPart)
+				}
 			}
 			continue
 		}

@@ -3,7 +3,7 @@ package ipset
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +53,7 @@ func (f *FileManager) writeAnyMode(ipsetFilePath string) error {
 	if err := os.WriteFile(ipsetFilePath, []byte(""), 0644); err != nil {
 		return fmt.Errorf("ошибка создания пустого файла ipset-all.txt: %w", err)
 	}
-	log.Printf("Режим ipset 'any': создан пустой файл %s", ipsetFilePath)
+	slog.Debug("Режим ipset 'any': создан пустой файл", "path", ipsetFilePath)
 	return nil
 }
 
@@ -63,7 +63,7 @@ func (f *FileManager) writeNoneMode(ipsetFilePath string) error {
 	if err := os.WriteFile(ipsetFilePath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("ошибка записи файла ipset-all.txt для режима none: %w", err)
 	}
-	log.Printf("Режим ipset 'none': файл %s содержит только 203.0.113.113/32", ipsetFilePath)
+	slog.Debug("Режим ipset 'none': файл содержит только 203.0.113.113/32", "path", ipsetFilePath)
 	return nil
 }
 
@@ -81,11 +81,11 @@ func (f *FileManager) writeLoadedMode(workingDir string, ipsetFilePath string) e
 			return fmt.Errorf("ошибка чтения бэкапа: %w", err)
 		}
 		baseContent = string(backupData)
-		log.Printf("Режим ipset 'loaded': загружен бэкап %s", ipsetBackupPath)
+		slog.Debug("Режим ipset 'loaded': загружен бэкап", "path", ipsetBackupPath)
 	} else {
 		// Если бэкап не существует, используем стандартный список
 		baseContent = "# Default ipset list\n"
-		log.Printf("Режим ipset 'loaded': используется содержимое по умолчанию")
+		slog.Debug("Режим ipset 'loaded': используется содержимое по умолчанию")
 	}
 
 	// Загружаем пользовательские подсети
@@ -98,7 +98,7 @@ func (f *FileManager) writeLoadedMode(workingDir string, ipsetFilePath string) e
 			finalContent += "\n"
 		}
 		finalContent += strings.Join(customSubnets, "\n") + "\n"
-		log.Printf("Режим ipset 'loaded': добавлено %d пользовательских подсетей", len(customSubnets))
+		slog.Debug("Режим ipset 'loaded': добавлены пользовательские подсети", "count", len(customSubnets))
 	}
 
 	if err := os.WriteFile(ipsetFilePath, []byte(finalContent), 0644); err != nil {
@@ -148,11 +148,11 @@ func (f *FileManager) loadCustomSubnets(workingDir string) []string {
 	// Путь к файлу пользовательских подсетей в директории конфигурации
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		log.Printf("Ошибка получения директории конфигурации: %v", err)
+		slog.Warn("Ошибка получения директории конфигурации", "error", err)
 		return nil
 	}
 
-	customIpsetPath := filepath.Join(configDir, domain.AppName, domain.HostsDirName, domain.IpsetCustomFile)
+	customIpsetPath := filepath.Join(configDir, domain.AppName, domain.HostsDirName, domain.IpsetExcludeUserFile)
 
 	// Проверяем существование файла
 	if _, err := os.Stat(customIpsetPath); os.IsNotExist(err) {
@@ -162,7 +162,7 @@ func (f *FileManager) loadCustomSubnets(workingDir string) []string {
 	// Читаем файл
 	file, err := os.Open(customIpsetPath)
 	if err != nil {
-		log.Printf("Ошибка открытия файла пользовательских подсетей: %v", err)
+		slog.Warn("Ошибка открытия файла пользовательских подсетей", "error", err)
 		return nil
 	}
 	defer file.Close()
@@ -179,7 +179,7 @@ func (f *FileManager) loadCustomSubnets(workingDir string) []string {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Printf("Ошибка чтения файла пользовательских подсетей: %v", err)
+		slog.Warn("Ошибка чтения файла пользовательских подсетей", "error", err)
 		return nil
 	}
 

@@ -1,6 +1,30 @@
 package app
 
-import "github.com/IProxymate/GoZapret/internal/domain"
+import (
+	"github.com/IProxymate/GoZapret/internal/config"
+	"github.com/IProxymate/GoZapret/internal/domain"
+	"github.com/IProxymate/GoZapret/internal/services/process"
+)
+
+// ProcessManager определяет интерфейс для управления процессами
+type ProcessManager interface {
+	// StartStrategy запускает стратегию
+	StartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterMode domain.GameFilterMode) error
+	// StopProcess останавливает текущий процесс
+	StopProcess() error
+	// RestartStrategy перезапускает стратегию
+	RestartStrategy(strategy *domain.Strategy, assetsPath domain.AssetsPath, gameFilterMode domain.GameFilterMode) error
+	// IsRunning проверяет, запущен ли процесс
+	IsRunning() bool
+	// IsWinwsProcessRunning проверяет, запущен ли winws.exe в системе
+	IsWinwsProcessRunning() bool
+	// GetCurrentProcess возвращает информацию о текущем процессе
+	GetCurrentProcess() *domain.ProcessInfo
+	// SetErrorCallback устанавливает callback для уведомления об ошибках
+	SetErrorCallback(callback process.ErrorCallback)
+	// GetLastError возвращает последнюю ошибку процесса
+	GetLastError() string
+}
 
 // ConfigService определяет интерфейс для управления конфигурацией
 type ConfigService interface {
@@ -28,9 +52,11 @@ type ConfigService interface {
 	// Настройки
 	GetAutoStart() bool
 	SetAutoStart(enabled bool) error
-	SetAutoStartWithService(enabled bool, autostartService interface{}) error
+	SetAutoStartWithService(enabled bool, autostartService config.AutostartSetter) error
 	GetGameFilter() bool
 	SetGameFilter(enabled bool) error
+	GetGameFilterMode() string
+	SetGameFilterMode(mode string) error
 	GetIpsetMode() string
 	SetIpsetMode(mode string) error
 	GetVersion() string
@@ -91,4 +117,3 @@ type AutostartManager interface {
 	// SetAutoStart устанавливает или убирает автозапуск приложения
 	SetAutoStart(enabled bool) error
 }
-
