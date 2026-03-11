@@ -86,30 +86,19 @@ func (p *BatParser) extractWinwsArgs(content string) ([]string, error) {
 }
 
 // unescapeBatSequences убирает escape-последовательности Windows BAT-файлов.
-// Поддерживаются следующие последовательности:
-	// Use a unique placeholder string instead of a null byte to avoid collisions
-	// if the input ever contains actual '\x00' characters.
-	caretPlaceholder := "__WINWS_BAT_CARET_PLACEHOLDER__"
-
-	s = strings.ReplaceAll(s, "^^", caretPlaceholder)
-	s = strings.ReplaceAll(s, "^!", "!")
-	s = strings.ReplaceAll(s, "^&", "&")
-	s = strings.ReplaceAll(s, "^|", "|")
-	s = strings.ReplaceAll(s, "^<", "<")
-	s = strings.ReplaceAll(s, "^>", ">")
-	s = strings.ReplaceAll(s, caretPlaceholder, "^")
-// Порядок замен важен: сначала все "^^" временно заменяются на служебный символ ("\x00"),
-// затем обрабатываются остальные escape-последовательности, после чего "\x00" заменяется
-// обратно на "^". Это позволяет корректно интерпретировать "^^" как один символ "^",
-// не мешая обработке других экранированных символов.
+// Порядок замен важен: сначала все "^^" временно заменяются на placeholder,
+// затем обрабатываются остальные escape-последовательности, после чего placeholder
+// заменяется обратно на "^". Это позволяет корректно интерпретировать "^^" как один
+// символ "^", не мешая обработке других экранированных символов.
 func (p *BatParser) unescapeBatSequences(s string) string {
-	s = strings.ReplaceAll(s, "^^", "\x00")
+	const placeholder = "\x00"
+	s = strings.ReplaceAll(s, "^^", placeholder)
 	s = strings.ReplaceAll(s, "^!", "!")
 	s = strings.ReplaceAll(s, "^&", "&")
 	s = strings.ReplaceAll(s, "^|", "|")
 	s = strings.ReplaceAll(s, "^<", "<")
 	s = strings.ReplaceAll(s, "^>", ">")
-	s = strings.ReplaceAll(s, "\x00", "^")
+	s = strings.ReplaceAll(s, placeholder, "^")
 	return s
 }
 
