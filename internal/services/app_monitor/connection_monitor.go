@@ -25,7 +25,7 @@ type ConnectionMonitor struct {
 	domainChecker *DomainChecker
 	dnsCache      *DNSCache
 	callbacks     []func(*NetworkRequest)
-	seenConns     map[string]bool // Для отслеживания уже виденных подключений
+	seenConns     map[string]time.Time // connKey -> время последнего наблюдения
 	logger        *slog.Logger
 }
 
@@ -36,7 +36,7 @@ func NewConnectionMonitor(ipsetChecker *IpsetChecker, domainChecker *DomainCheck
 		domainChecker: domainChecker,
 		dnsCache:      NewDNSCache(),
 		callbacks:     make([]func(*NetworkRequest), 0),
-		seenConns:     make(map[string]bool),
+		seenConns:     make(map[string]time.Time),
 		logger:        slog.Default(),
 	}
 }
@@ -48,7 +48,8 @@ func (m *ConnectionMonitor) OnRequest(callback func(*NetworkRequest)) {
 	m.callbacks = append(m.callbacks, callback)
 }
 
-// Start начинает мониторинг сетевых подключений для указанного процесса
+// Start начинает мониторинг сетевых подключений для указанного процесса.
+// processPath может быть полным путём к .exe или просто именем процесса (например, "Kiro.exe").
 func (m *ConnectionMonitor) Start(processPath string) error {
 	m.mu.Lock()
 	if m.session != nil && m.session.IsRunning {
@@ -68,7 +69,7 @@ func (m *ConnectionMonitor) Start(processPath string) error {
 	m.targetProcess = strings.TrimSuffix(strings.ToLower(processName), ".exe")
 	m.stopChan = make(chan struct{})
 	m.requests = make([]*NetworkRequest, 0)
-	m.seenConns = make(map[string]bool)
+	m.seenConns = make(map[string]time.Time)
 	m.session = &MonitorSession{
 		StartTime:   time.Now(),
 		ProcessPath: processPath,
@@ -90,10 +91,12 @@ func (m *ConnectionMonitor) Start(processPath string) error {
 	return nil
 }
 
-// findAllProcessPIDs находит все PID процессов, связанных с приложением
+// findAllProcessPIDs находит все PID процессов, связанных с приложением.
+// processPath может быть полным путём или просто именем процесса.
 func (m *ConnectionMonitor) findAllProcessPIDs(processPath string) (map[int32]bool, error) {
 	processName := strings.ToLower(filepath.Base(processPath))
 	baseName := strings.TrimSuffix(processName, ".exe")
+	isFullPath := filepath.IsAbs(processPath) || strings.Contains(processPath, string(filepath.Separator))
 
 	// Также ищем связанные процессы (например, start_protected_game.exe для игр с античитом)
 	relatedNames := []string{
@@ -128,15 +131,17 @@ func (m *ConnectionMonitor) findAllProcessPIDs(processPath string) (map[int32]bo
 			}
 		}
 
-		// Также проверяем полный путь
-		exe, err := p.Exe()
-		if err == nil {
-			exeDir := strings.ToLower(filepath.Dir(exe))
-			targetDir := strings.ToLower(filepath.Dir(processPath))
-			// Если процесс в той же папке или подпапке
-			if strings.HasPrefix(exeDir, targetDir) || strings.HasPrefix(targetDir, exeDir) {
-				pids[p.Pid] = true
-				m.logger.Debug("Найден процесс по пути", "name", name, "pid", p.Pid, "exe", exe)
+		// Проверяем полный путь только если передан полный путь
+		if isFullPath {
+			exe, err := p.Exe()
+			if err == nil {
+				exeDir := strings.ToLower(filepath.Dir(exe))
+				targetDir := strings.ToLower(filepath.Dir(processPath))
+				// Если процесс в той же папке или подпапке
+				if strings.HasPrefix(exeDir, targetDir) || strings.HasPrefix(targetDir, exeDir) {
+					pids[p.Pid] = true
+					m.logger.Debug("Найден процесс по пути", "name", name, "pid", p.Pid, "exe", exe)
+				}
 			}
 		}
 	}
@@ -195,6 +200,10 @@ func (m *ConnectionMonitor) runMonitor() {
 	pidTicker := time.NewTicker(2 * time.Second)
 	defer pidTicker.Stop()
 
+	// Периодически очищаем устаревшие записи в seenConns
+	cleanupTicker := time.NewTicker(30 * time.Second)
+	defer cleanupTicker.Stop()
+
 	for {
 		select {
 		case <-m.stopChan:
@@ -203,19 +212,35 @@ func (m *ConnectionMonitor) runMonitor() {
 			m.checkConnections()
 		case <-pidTicker.C:
 			m.refreshPIDs()
+		case <-cleanupTicker.C:
+			m.cleanupSeenConns()
 		}
 	}
 }
 
-// refreshPIDs обновляет список отслеживаемых PID
+// cleanupSeenConns удаляет записи о подключениях старше 60 секунд,
+// чтобы повторные подключения к тому же серверу фиксировались заново.
+func (m *ConnectionMonitor) cleanupSeenConns() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	threshold := time.Now().Add(-60 * time.Second)
+	for key, lastSeen := range m.seenConns {
+		if lastSeen.Before(threshold) {
+			delete(m.seenConns, key)
+		}
+	}
+}
+
+// refreshPIDs обновляет список отслеживаемых PID — добавляет новые и удаляет завершившиеся
 func (m *ConnectionMonitor) refreshPIDs() {
 	m.mu.RLock()
 	processPath := m.session.ProcessPath
 	m.mu.RUnlock()
 
-	newPIDs, err := m.findAllProcessPIDs(processPath)
-	if err != nil {
-		return
+	newPIDs, _ := m.findAllProcessPIDs(processPath)
+	if newPIDs == nil {
+		newPIDs = make(map[int32]bool)
 	}
 
 	m.mu.Lock()
@@ -226,7 +251,29 @@ func (m *ConnectionMonitor) refreshPIDs() {
 			m.logger.Debug("Добавлен новый PID", "pid", pid)
 		}
 	}
+
+	// Удаляем PID, которые больше не существуют (процесс завершился)
+	for pid := range m.targetPIDs {
+		if !newPIDs[pid] {
+			// Проверяем, жив ли процесс
+			if !isProcessAlive(pid) {
+				delete(m.targetPIDs, pid)
+				m.logger.Debug("Удалён завершившийся PID", "pid", pid)
+			}
+		}
+	}
 	m.mu.Unlock()
+}
+
+// isProcessAlive проверяет, существует ли процесс с данным PID
+func isProcessAlive(pid int32) bool {
+	p, err := process.NewProcess(pid)
+	if err != nil {
+		return false
+	}
+	// Проверяем, что процесс реально работает
+	_, err = p.Status()
+	return err == nil
 }
 
 // checkConnections проверяет текущие подключения процесса
@@ -242,6 +289,10 @@ func (m *ConnectionMonitor) checkConnections() {
 	}
 	m.mu.RUnlock()
 
+	if len(pids) == 0 {
+		return
+	}
+
 	// Получаем все подключения
 	connections, err := psnet.Connections("all")
 	if err != nil {
@@ -249,16 +300,31 @@ func (m *ConnectionMonitor) checkConnections() {
 		return
 	}
 
+	now := time.Now()
+
 	for _, conn := range connections {
 		if !pids[conn.Pid] {
 			continue
+		}
+
+		// Фильтруем по состоянию — нас интересуют только активные подключения
+		// ESTABLISHED — активное TCP-соединение
+		// SYN_SENT — попытка установить соединение (исходящий запрос)
+		// Для UDP (conn.Type == 2) состояние не проверяем — UDP stateless
+		if conn.Type != 2 { // TCP
+			status := strings.ToUpper(conn.Status)
+			if status != "ESTABLISHED" && status != "SYN_SENT" && status != "SYN_RECV" {
+				continue
+			}
 		}
 
 		remoteIP := conn.Raddr.IP
 		remotePort := conn.Raddr.Port
 
 		// Пропускаем локальные и пустые адреса
-		if remoteIP == "" || remoteIP == "0.0.0.0" || remoteIP == "::" || remoteIP == "127.0.0.1" {
+		if remoteIP == "" || remoteIP == "0.0.0.0" || remoteIP == "::" ||
+			remoteIP == "127.0.0.1" || remoteIP == "::1" ||
+			strings.HasPrefix(remoteIP, "169.254.") { // link-local
 			continue
 		}
 
@@ -266,11 +332,16 @@ func (m *ConnectionMonitor) checkConnections() {
 		connKey := fmt.Sprintf("%s:%d:%d", remoteIP, remotePort, conn.Type)
 
 		m.mu.Lock()
-		if m.seenConns[connKey] {
-			m.mu.Unlock()
-			continue
+		if lastSeen, exists := m.seenConns[connKey]; exists {
+			// Обновляем время последнего наблюдения
+			m.seenConns[connKey] = now
+			// Если подключение видели менее 60 секунд назад — пропускаем
+			if now.Sub(lastSeen) < 60*time.Second {
+				m.mu.Unlock()
+				continue
+			}
 		}
-		m.seenConns[connKey] = true
+		m.seenConns[connKey] = now
 		m.mu.Unlock()
 
 		// Определяем протокол
@@ -291,11 +362,11 @@ func (m *ConnectionMonitor) checkConnections() {
 			subnet = fmt.Sprintf("%d.0.0.0/8", ip4[0])
 		}
 
-		// Ищем hostname для IP
-		hostname := m.dnsCache.Lookup(remoteIP)
+		// Ищем hostname для IP (асинхронно не блокируем, используем только кэш)
+		hostname := m.dnsCache.LookupCached(remoteIP)
 
 		request := &NetworkRequest{
-			Timestamp:   time.Now(),
+			Timestamp:   now,
 			ProcessName: m.targetProcess,
 			ProcessPath: m.session.ProcessPath,
 			ProcessID:   uint32(conn.Pid),
@@ -323,6 +394,13 @@ func (m *ConnectionMonitor) checkConnections() {
 // addRequest добавляет запрос в список
 func (m *ConnectionMonitor) addRequest(req *NetworkRequest) {
 	m.mu.Lock()
+	// Лимит на количество запросов — защита от утечки памяти при долгом мониторинге
+	const maxRequests = 10000
+	if len(m.requests) >= maxRequests {
+		// Удаляем старейшие 10% записей
+		cutoff := maxRequests / 10
+		m.requests = m.requests[cutoff:]
+	}
 	m.requests = append(m.requests, req)
 	callbacks := make([]func(*NetworkRequest), len(m.callbacks))
 	copy(callbacks, m.callbacks)

@@ -36,9 +36,9 @@ func (w *WorkspaceManager) GetExcludeListPath() string {
 	return filepath.Join(w.GetHostsDir(), domain.ListExcludeFile)
 }
 
-// GetCustomIpsetPath возвращает путь к файлу ipset-exclude-user.txt
+// GetCustomIpsetPath возвращает путь к файлу ipset-include-user.txt
 func (w *WorkspaceManager) GetCustomIpsetPath() string {
-	return filepath.Join(w.GetHostsDir(), domain.IpsetExcludeUserFile)
+	return filepath.Join(w.GetHostsDir(), domain.IpsetIncludeUserFile)
 }
 
 // EnsureHostsDirectory создает директорию hosts и файлы списков доменов
@@ -54,7 +54,11 @@ func (w *WorkspaceManager) EnsureHostsDirectory() error {
 	migrations := [][2]string{
 		{domain.LegacyListExtraFile, domain.ListExtraFile},
 		{domain.LegacyListExcludeFile, domain.ListExcludeFile},
-		{domain.LegacyIpsetCustomFile, domain.IpsetExcludeUserFile},
+		// ipset-exclude-user.txt переименован в ipset-include-user.txt (по факту это
+		// include-список). Более новое имя мигрируем первым, чтобы при наличии обоих
+		// файлов сохранилось актуальное содержимое.
+		{domain.LegacyIpsetExcludeUserFile, domain.IpsetIncludeUserFile},
+		{domain.LegacyIpsetCustomFile, domain.IpsetIncludeUserFile},
 	}
 
 	for _, m := range migrations {
@@ -77,7 +81,7 @@ func (w *WorkspaceManager) EnsureHostsDirectory() error {
 	filesToCreate := []string{
 		domain.ListExtraFile,
 		domain.ListExcludeFile,
-		domain.IpsetExcludeUserFile,
+		domain.IpsetIncludeUserFile,
 	}
 
 	for _, filename := range filesToCreate {

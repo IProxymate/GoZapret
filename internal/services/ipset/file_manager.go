@@ -67,7 +67,13 @@ func (f *FileManager) writeNoneMode(ipsetFilePath string) error {
 	return nil
 }
 
-// writeLoadedMode восстанавливает файл из бэкапа или создает стандартный список
+// writeLoadedMode восстанавливает файл ipset-all.txt (include-список) из бэкапа
+// или создаёт стандартный список, после чего добавляет к нему пользовательские
+// подсети из ipset-include-user.txt.
+//
+// ВАЖНО: пользовательские подсети добавляются именно в общий include-список
+// (ipset-all.txt), то есть становятся дополнительными целями для десинхронизации.
+// Это работает только в режиме "loaded" (в "any"/"none" ipset-all.txt пуст/заглушка).
 func (f *FileManager) writeLoadedMode(workingDir string, ipsetFilePath string) error {
 	ipsetBackupPath := ipsetFilePath + ".backup"
 
@@ -143,7 +149,7 @@ func (f *FileManager) GetCurrentMode(workingDir string) (string, error) {
 	return "loaded", nil
 }
 
-// loadCustomSubnets загружает пользовательские подсети из файла ipset-custom.txt
+// loadCustomSubnets загружает пользовательские подсети из файла ipset-include-user.txt
 func (f *FileManager) loadCustomSubnets(workingDir string) []string {
 	// Путь к файлу пользовательских подсетей в директории конфигурации
 	configDir, err := os.UserConfigDir()
@@ -152,7 +158,7 @@ func (f *FileManager) loadCustomSubnets(workingDir string) []string {
 		return nil
 	}
 
-	customIpsetPath := filepath.Join(configDir, domain.AppName, domain.HostsDirName, domain.IpsetExcludeUserFile)
+	customIpsetPath := filepath.Join(configDir, domain.AppName, domain.HostsDirName, domain.IpsetIncludeUserFile)
 
 	// Проверяем существование файла
 	if _, err := os.Stat(customIpsetPath); os.IsNotExist(err) {

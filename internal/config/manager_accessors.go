@@ -23,7 +23,7 @@ func (m *Manager) GetExcludeListPath() string {
 	return m.workspace.GetExcludeListPath()
 }
 
-// GetCustomIpsetPath возвращает путь к файлу ipset-custom.txt
+// GetCustomIpsetPath возвращает путь к файлу ipset-include-user.txt
 func (m *Manager) GetCustomIpsetPath() string {
 	return m.workspace.GetCustomIpsetPath()
 }

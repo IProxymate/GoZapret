@@ -479,7 +479,6 @@ func (v *MainView) handleStart() {
 		return
 	}
 
-	dialog.ShowInformation("Успех", fmt.Sprintf("Стратегия '%s' успешно запущена", strategyName), v.app.Window)
 }
 
 // handleStop обрабатывает остановку процесса
@@ -491,7 +490,6 @@ func (v *MainView) handleStop() {
 		return
 	}
 
-	dialog.ShowInformation("Успех", "Процесс успешно остановлен", v.app.Window)
 }
 
 // runDiagnostics запускает диагностику

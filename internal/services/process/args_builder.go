@@ -160,6 +160,10 @@ func (b *ArgsBuilder) replacePathsInArgs(args []string, workDir string) {
 // Использует пути к файлам напрямую из configManager (без копирования).
 // Работает для обоих форматов bat-файлов (старого и нового).
 // Аргументы уже разбиты splitEqualsArgs, поэтому --hostlist и значение — отдельные элементы.
+//
+// Инжекция происходит ТОЛЬКО в "общие" профили — те, которые уже содержат ссылку
+// на list-general.txt или list-general-user.txt. Специализированные профили
+// (list-google.txt, hostlist-domains и т.д.) не затрагиваются.
 func (b *ArgsBuilder) injectUserLists(args []string) []string {
 	if b.configManager == nil {
 		return args
@@ -177,58 +181,23 @@ func (b *ArgsBuilder) injectUserLists(args []string) []string {
 		return args
 	}
 
-	// Создаем новый массив аргументов
+	// Разбиваем аргументы на профили (секции между --new)
+	profiles := b.splitProfiles(args)
+
+	// Собираем результат
 	newArgs := make([]string, 0, len(args)+30)
 
-	// Флаги для текущего профиля (между --new)
-	addedExtraInProfile := false
-	addedExcludeInProfile := false
-	// Отслеживаем предыдущий флаг для инжекции после значения
-	pendingInject := ""
-
-	for _, arg := range args {
-		newArgs = append(newArgs, arg)
-
-		// Если встретили --new, сбрасываем флаги для нового профиля
-		if arg == "--new" {
-			addedExtraInProfile = false
-			addedExcludeInProfile = false
-			pendingInject = ""
-			continue
+	for i, profile := range profiles {
+		if i > 0 {
+			newArgs = append(newArgs, "--new")
 		}
 
-		// Если ожидаем значение после флага — инжектируем после него
-		if pendingInject != "" {
-			switch pendingInject {
-			case "hostlist":
-				if !addedExtraInProfile {
-					if extraExists {
-						newArgs = append(newArgs, "--hostlist", extraListPath)
-						slog.Debug("Инжектирован --hostlist GoZapret в профиль", "path", extraListPath)
-					}
-					if excludeExists && !addedExcludeInProfile {
-						newArgs = append(newArgs, "--hostlist-exclude", excludeListPath)
-						addedExcludeInProfile = true
-					}
-					addedExtraInProfile = true
-				}
-			case "hostlist-exclude":
-				if !addedExcludeInProfile && excludeExists {
-					newArgs = append(newArgs, "--hostlist-exclude", excludeListPath)
-					slog.Debug("Инжектирован --hostlist-exclude GoZapret в профиль", "path", excludeListPath)
-					addedExcludeInProfile = true
-				}
-			}
-			pendingInject = ""
-			continue
+		// Инжектируем только в "общие" профили (содержащие list-general)
+		if b.isGeneralProfile(profile) {
+			profile = b.injectIntoProfile(profile, extraListPath, excludeListPath, extraExists, excludeExists)
 		}
 
-		// Запоминаем флаг — следующий аргумент будет его значением
-		if !addedExtraInProfile && arg == "--hostlist" {
-			pendingInject = "hostlist"
-		} else if !addedExcludeInProfile && arg == "--hostlist-exclude" {
-			pendingInject = "hostlist-exclude"
-		}
+		newArgs = append(newArgs, profile...)
 	}
 
 	if extraExists || excludeExists {
@@ -237,6 +206,87 @@ func (b *ArgsBuilder) injectUserLists(args []string) []string {
 	}
 
 	return newArgs
+}
+
+// splitProfiles разбивает аргументы на профили (секции, разделённые --new)
+func (b *ArgsBuilder) splitProfiles(args []string) [][]string {
+	var profiles [][]string
+	var current []string
+
+	for _, arg := range args {
+		if arg == "--new" {
+			profiles = append(profiles, current)
+			current = nil
+		} else {
+			current = append(current, arg)
+		}
+	}
+	if len(current) > 0 {
+		profiles = append(profiles, current)
+	}
+
+	return profiles
+}
+
+// isGeneralProfile проверяет, является ли профиль "общим" — содержит ли он
+// ссылку на list-general.txt или list-general-user.txt.
+// Специализированные профили (list-google, hostlist-domains и т.д.) не затрагиваются.
+func (b *ArgsBuilder) isGeneralProfile(profile []string) bool {
+	for _, arg := range profile {
+		// Проверяем, содержит ли значение аргумента "list-general"
+		if strings.Contains(filepath.Base(arg), "list-general") {
+			return true
+		}
+	}
+	return false
+}
+
+// injectIntoProfile инжектирует пользовательские списки в один профиль
+func (b *ArgsBuilder) injectIntoProfile(profile []string, extraListPath, excludeListPath string, extraExists, excludeExists bool) []string {
+	newProfile := make([]string, 0, len(profile)+4)
+
+	addedExtra := false
+	addedExclude := false
+	pendingInject := ""
+
+	for _, arg := range profile {
+		newProfile = append(newProfile, arg)
+
+		// Если ожидаем значение после флага — инжектируем после него
+		if pendingInject != "" {
+			switch pendingInject {
+			case "hostlist":
+				if !addedExtra {
+					if extraExists {
+						newProfile = append(newProfile, "--hostlist", extraListPath)
+						slog.Debug("Инжектирован --hostlist GoZapret в профиль", "path", extraListPath)
+					}
+					if excludeExists && !addedExclude {
+						newProfile = append(newProfile, "--hostlist-exclude", excludeListPath)
+						addedExclude = true
+					}
+					addedExtra = true
+				}
+			case "hostlist-exclude":
+				if !addedExclude && excludeExists {
+					newProfile = append(newProfile, "--hostlist-exclude", excludeListPath)
+					slog.Debug("Инжектирован --hostlist-exclude GoZapret в профиль", "path", excludeListPath)
+					addedExclude = true
+				}
+			}
+			pendingInject = ""
+			continue
+		}
+
+		// Запоминаем флаг — следующий аргумент будет его значением
+		if !addedExtra && arg == "--hostlist" {
+			pendingInject = "hostlist"
+		} else if !addedExclude && arg == "--hostlist-exclude" {
+			pendingInject = "hostlist-exclude"
+		}
+	}
+
+	return newProfile
 }
 
 // isFileNotEmpty проверяет, существует ли файл и содержит ли он реальные данные

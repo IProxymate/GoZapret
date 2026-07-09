@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // Monitor интерфейс для мониторов
@@ -41,20 +42,30 @@ func NewService(workingDir string) *Service {
 	}
 }
 
-// StartMonitoring начинает мониторинг указанного приложения
+// StartMonitoring начинает мониторинг указанного приложения.
+// Принимает либо полный путь к .exe файлу, либо просто имя процесса (например, "Kiro.exe").
 func (s *Service) StartMonitoring(executablePath string) error {
-	// Проверяем существование файла
-	if _, err := os.Stat(executablePath); os.IsNotExist(err) {
-		return fmt.Errorf("файл не найден: %s", executablePath)
+	// Определяем, передан полный путь или просто имя процесса
+	isFullPath := filepath.IsAbs(executablePath) || strings.Contains(executablePath, string(os.PathSeparator))
+
+	if isFullPath {
+		// Полный путь — проверяем существование файла
+		if _, err := os.Stat(executablePath); os.IsNotExist(err) {
+			return fmt.Errorf("файл не найден: %s", executablePath)
+		}
+
+		ext := filepath.Ext(executablePath)
+		if ext != ".exe" {
+			return fmt.Errorf("файл должен быть исполняемым (.exe): %s", executablePath)
+		}
+	} else {
+		// Просто имя процесса — добавляем .exe если нет
+		if !strings.HasSuffix(strings.ToLower(executablePath), ".exe") {
+			executablePath += ".exe"
+		}
 	}
 
-	// Проверяем расширение
-	ext := filepath.Ext(executablePath)
-	if ext != ".exe" {
-		return fmt.Errorf("файл должен быть исполняемым (.exe): %s", executablePath)
-	}
-
-	s.logger.Info("Начало мониторинга приложения", "path", executablePath)
+	s.logger.Info("Начало мониторинга приложения", "target", executablePath, "fullPath", isFullPath)
 	return s.monitor.Start(executablePath)
 }
 
@@ -99,41 +110,42 @@ func (s *Service) FormatResultAsText(result *MonitorResult) string {
 		return "Нет данных"
 	}
 
-	var text string
+	var b strings.Builder
 
-	text += fmt.Sprintf("=== Результаты мониторинга ===\n")
-	text += fmt.Sprintf("Приложение: %s\n", result.Session.ProcessName)
-	text += fmt.Sprintf("Время мониторинга: %s - %s\n\n",
+	b.WriteString("=== Результаты мониторинга ===\n")
+	fmt.Fprintf(&b, "Приложение: %s\n", result.Session.ProcessName)
+	fmt.Fprintf(&b, "Время мониторинга: %s - %s\n",
 		result.Session.StartTime.Format("15:04:05"),
 		result.Session.EndTime.Format("15:04:05"))
+	fmt.Fprintf(&b, "Всего подключений: %d\n\n", len(result.Session.Requests))
 
-	text += fmt.Sprintf("=== Статистика по подсетям (/8) ===\n")
+	b.WriteString("=== Статистика по подсетям (/8) ===\n")
 	for _, stats := range result.IPStatistics {
 		status := "✅ В ipset"
 		if !stats.InIpset {
 			status = "❌ НЕТ в ipset"
 		}
-		text += fmt.Sprintf("%s: %d запросов %s\n", stats.Subnet, stats.Count, status)
+		fmt.Fprintf(&b, "%s: %d подключений %s\n", stats.Subnet, stats.Count, status)
 		if len(stats.SampleIPs) > 0 {
-			text += fmt.Sprintf("  Примеры: %v\n", stats.SampleIPs)
+			fmt.Fprintf(&b, "  Примеры: %v\n", stats.SampleIPs)
 		}
 	}
 
 	if len(result.MissingIPSets) > 0 {
-		text += fmt.Sprintf("\n=== Рекомендуется добавить в ipset ===\n")
+		b.WriteString("\n=== Рекомендуется добавить в ipset ===\n")
 		for _, subnet := range result.MissingIPSets {
-			text += fmt.Sprintf("%s\n", subnet)
+			fmt.Fprintf(&b, "%s\n", subnet)
 		}
 	}
 
-	text += fmt.Sprintf("\n=== Статистика по доменам ===\n")
+	b.WriteString("\n=== Статистика по доменам ===\n")
 	for _, stats := range result.DomainStats {
 		status := "✅ В списке"
 		if !stats.InDomains {
 			status = "⚪ Нет в списке"
 		}
-		text += fmt.Sprintf("%s: %d запросов %s\n", stats.Domain, stats.Count, status)
+		fmt.Fprintf(&b, "%s: %d подключений %s\n", stats.Domain, stats.Count, status)
 	}
 
-	return text
+	return b.String()
 }
