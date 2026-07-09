@@ -13,13 +13,15 @@ import (
 
 // IpsetChecker проверяет IP адреса на вхождение в ipset
 type IpsetChecker struct {
-	subnets []*net.IPNet
+	subnets  []*net.IPNet       // Подсети (не /32)
+	exactIPs map[string]bool    // Точные IP (/32) — быстрый lookup через map
 }
 
 // NewIpsetChecker создает новый чекер ipset
 func NewIpsetChecker(workingDir string) *IpsetChecker {
 	checker := &IpsetChecker{
-		subnets: make([]*net.IPNet, 0),
+		subnets:  make([]*net.IPNet, 0),
+		exactIPs: make(map[string]bool),
 	}
 	checker.loadFromFile(workingDir)
 	return checker
@@ -41,13 +43,25 @@ func (c *IpsetChecker) loadFromFile(workingDir string) {
 			continue
 		}
 
-		// Добавляем /32 если нет маски
+		// Если нет маски — это точный IP
 		if !strings.Contains(line, "/") {
-			line += "/32"
+			ip := net.ParseIP(line)
+			if ip != nil {
+				c.exactIPs[ip.String()] = true
+			}
+			continue
 		}
 
 		_, subnet, err := net.ParseCIDR(line)
-		if err == nil {
+		if err != nil {
+			continue
+		}
+
+		// /32 для IPv4 и /128 для IPv6 — точные IP, кладём в map
+		ones, bits := subnet.Mask.Size()
+		if ones == bits {
+			c.exactIPs[subnet.IP.String()] = true
+		} else {
 			c.subnets = append(c.subnets, subnet)
 		}
 	}
@@ -55,6 +69,12 @@ func (c *IpsetChecker) loadFromFile(workingDir string) {
 
 // Contains проверяет, содержится ли IP в ipset
 func (c *IpsetChecker) Contains(ip net.IP) bool {
+	// Быстрая проверка точных IP через map — O(1)
+	if c.exactIPs[ip.String()] {
+		return true
+	}
+
+	// Проверка подсетей — O(n), но n теперь значительно меньше
 	for _, subnet := range c.subnets {
 		if subnet.Contains(ip) {
 			return true
@@ -81,15 +101,14 @@ func NewDomainChecker(workingDir string) *DomainChecker {
 
 // loadFromFiles загружает домены из файлов
 func (c *DomainChecker) loadFromFiles(workingDir string) {
-	// Загружаем из list-general.txt и других файлов списков
-	listFiles := []string{
-		filepath.Join(workingDir, "lists", "list-general.txt"),
-		filepath.Join(workingDir, "lists", "list-discord.txt"),
-		filepath.Join(workingDir, "lists", "list-youtube.txt"),
-	}
+	listsDir := filepath.Join(workingDir, "lists")
 
-	for _, path := range listFiles {
-		c.loadDomainsFromFile(path)
+	// Загружаем все list-*.txt файлы из директории динамически
+	matches, err := filepath.Glob(filepath.Join(listsDir, "list-*.txt"))
+	if err == nil {
+		for _, path := range matches {
+			c.loadDomainsFromFile(path)
+		}
 	}
 
 	// Загружаем пользовательские домены

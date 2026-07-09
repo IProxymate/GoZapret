@@ -73,7 +73,7 @@ func (v *AppMonitorView) Show() {
 func (v *AppMonitorView) createComponents() {
 	// Поле ввода пути
 	v.pathEntry = widget.NewEntry()
-	v.pathEntry.SetPlaceHolder("Путь к исполняемому файлу (.exe)")
+	v.pathEntry.SetPlaceHolder("Имя процесса (например, Kiro.exe) или полный путь к .exe")
 
 	// Кнопки управления
 	v.startButton = widget.NewButtonWithIcon("Начать мониторинг", theme.MediaPlayIcon(), v.startMonitoring)
@@ -207,12 +207,12 @@ func (v *AppMonitorView) buildLayout() fyne.CanvasObject {
 	// Инструкция (компактная)
 	instructionText := widget.NewRichTextFromMarkdown(`
 **Как использовать:**
-1. Укажите путь к .exe файлу игры → 2. Нажмите "Начать" → 3. Запустите игру → 4. Играйте → 5. Нажмите "Остановить"
+1. Укажите имя процесса (например, "Kiro.exe") или полный путь к .exe → 2. Нажмите "Начать" → 3. Запустите приложение → 4. Используйте его → 5. Нажмите "Остановить"
 `)
 
 	// Панель управления
 	controlPanel := container.NewVBox(
-		container.NewBorder(nil, nil, widget.NewLabel("Приложение:"), nil, pathContainer),
+		container.NewBorder(nil, nil, widget.NewLabel("Процесс:"), nil, pathContainer),
 		container.NewHBox(v.startButton, v.stopButton, widget.NewSeparator(), v.progressBar),
 	)
 
@@ -312,9 +312,15 @@ func (v *AppMonitorView) showFileDialog() {
 
 // startMonitoring начинает мониторинг
 func (v *AppMonitorView) startMonitoring() {
-	path := v.pathEntry.Text
+	path := strings.TrimSpace(v.pathEntry.Text)
 	if path == "" {
-		dialog.ShowError(fmt.Errorf("укажите путь к исполняемому файлу"), v.monitorWindow)
+		dialog.ShowError(fmt.Errorf("укажите имя процесса или путь к исполняемому файлу"), v.monitorWindow)
+		return
+	}
+
+	// Проверяем права администратора — без них PID подключений недоступны
+	if !v.app.Services.Admin.IsAdmin() {
+		dialog.ShowError(fmt.Errorf("для мониторинга сетевых подключений требуются права администратора"), v.monitorWindow)
 		return
 	}
 
